@@ -1,0 +1,80 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.whl
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Distribution / packaging
+.Python
+pip-wheel-metadata/
+share/python-wheels/
+*.manifest
+RECORD
+
+# Testing
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+coverage.xml
+*.cover
+*.py,cover
+htmlcov/
+.pytest_cache/
+nosetests.xml
+
+# Type checkers
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+.pyre/
+
+# Ruff cache
+.ruff_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local env and secrets
+.env
+.env.*
+.pypirc
+
+# bootstrap scripts
+# (scripts/ is tracked so contributors can use the bootstrapping helpers)
+
+# Python local/version files
+.python-version
+__pypackages__/
+
+# Package metadata directories
+*.egg-info/
+
+# Editors / tooling
+.ropeproject/
+.ipynb_checkpoints/
