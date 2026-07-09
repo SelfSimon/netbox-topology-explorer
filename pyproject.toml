@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "netbox-topology-explorer"
+version = "0.1.0"
+description = "NetBox plugin: graphical topology view of devices and cable path traces per location"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "G1tHub-PRO" },
+    { name = "SelfSimon" },
+]
+keywords = ["netbox", "plugin", "topology", "dcim", "cables", "network"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Plugins",
+    "Framework :: Django",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Networking",
+]
+
+[project.urls]
+Homepage = "https://github.com/SelfSimon/netbox-topology-explorer"
+Repository = "https://github.com/SelfSimon/netbox-topology-explorer"
+"Bug Tracker" = "https://github.com/SelfSimon/netbox-topology-explorer/issues"
+
+[tool.setuptools.packages.find]
+include = ["netbox_topology_explorer*"]
+
+[tool.setuptools.package-data]
+netbox_topology_explorer = ["templates/**/*"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.12.0",
+    "black>=23.0",
+    "pre-commit>=2.20",
+]
+
+[tool.ruff]
+line-length = 88
+extend-select = ["E", "F", "W"]
