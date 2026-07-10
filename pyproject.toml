@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "netbox-topology-explorer"
-version = "0.1.0"
+version = "0.1.1"
 description = "NetBox plugin: graphical topology view of devices and cable path traces per location"
 readme = "README.md"
 requires-python = ">=3.10"
