@@ -1,0 +1,515 @@
+{% extends 'generic/object.html' %}
+{% load helpers %}
+
+{% block content %}
+<div class="row">
+  <div class="col col-md-12">
+    <div class="card">
+      <div class="card-body p-0">
+        {% if device_count == 0 %}
+          <p class="text-muted p-3">No devices in this location.</p>
+        {% else %}
+          <div style="display:flex; height:640px; overflow:hidden;">
+            <div id="topo-wrap" style="flex:1 1 auto; position:relative; min-width:0;">
+              <div style="position:absolute; top:10px; left:10px; z-index:10; display:flex; gap:6px;">
+                <button id="btn-fit"        style="background:var(--tblr-card-bg,#fff); border:1px solid var(--tblr-border-color); border-radius:6px; padding:4px 10px; font-size:12px; cursor:pointer; color:var(--tblr-body-color);">&#x2922; Center</button>
+                <button id="btn-zin"        style="background:var(--tblr-card-bg,#fff); border:1px solid var(--tblr-border-color); border-radius:6px; padding:4px 10px; font-size:14px; cursor:pointer; color:var(--tblr-body-color); font-weight:600;">+</button>
+                <button id="btn-zout"       style="background:var(--tblr-card-bg,#fff); border:1px solid var(--tblr-border-color); border-radius:6px; padding:4px 10px; font-size:14px; cursor:pointer; color:var(--tblr-body-color); font-weight:600;">−</button>
+                <div style="display:flex; align-items:center; gap:5px; background:var(--tblr-card-bg,#fff); border:1px solid var(--tblr-border-color); border-radius:6px; padding:4px 10px;">
+                  <span style="font-size:11px; color:var(--tblr-body-color); white-space:nowrap;">Spacing</span>
+                  <input id="slider-repulsion" type="range" min="50" max="3000" value="350" step="50"
+                    style="width:90px; cursor:pointer; accent-color:var(--tblr-primary,#2f6fed);">
+                </div>
+              </div>
+              <div style="position:absolute; top:10px; right:10px; z-index:10;">
+                <button id="btn-table" style="background:var(--tblr-primary,#2f6fed); border:none; border-radius:6px; padding:4px 12px; font-size:12px; cursor:pointer; color:#fff; font-weight:500;">&#9776; Trace table</button>
+              </div>
+              <!-- Trace modal -->
+              <div id="trace-modal" style="display:none; position:absolute; inset:0; z-index:100; background:rgba(0,0,0,0.45); overflow:auto; padding:20px;">
+                <div style="background:var(--tblr-card-bg,#fff); border-radius:8px; padding:20px; max-width:1100px; margin:0 auto; position:relative;">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+                    <strong style="font-size:15px;">Cable traces — all devices</strong>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                      <button id="btn-export-csv" style="background:var(--tblr-card-bg,#fff); border:1px solid var(--tblr-border-color); border-radius:6px; padding:3px 10px; font-size:12px; cursor:pointer; color:var(--tblr-body-color);">⬇ CSV</button>
+                      <button id="btn-close-modal" style="background:none; border:none; font-size:20px; cursor:pointer; color:var(--tblr-body-color); line-height:1;">×</button>
+                    </div>
+                  </div>
+                  <div style="overflow-x:auto;">
+                    <table id="trace-table" style="width:100%; border-collapse:collapse; font-size:12px;">
+                      <thead id="trace-thead"></thead>
+                      <tbody id="trace-tbody"></tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+              <svg id="topo-svg" style="width:100%;height:100%;"></svg>
+            </div>
+            <div id="trace-panel" style="width:300px;flex-shrink:0;border-left:1px solid var(--tblr-border-color);overflow-y:auto;padding:14px;font-size:13px;">
+              <p style="color:var(--tblr-secondary);margin:0;">Click on a device.</p>
+            </div>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if device_count > 0 %}
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script>
+(function(){
+  const DATA_URL = "{% url 'plugins:netbox_topology_explorer:location_topology_data' object.pk %}";
+  const panel = document.getElementById('trace-panel');
+  let allPaths = [], simulation, zoomBehavior;
+  let gLinks, gNodes, gLabels;
+  let nodesData, linksData;
+
+  function esc(s){ return s==null?'':String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  fetch(DATA_URL, {headers:{'X-Requested-With':'XMLHttpRequest'}})
+    .then(r=>r.json()).then(build)
+    .catch(e=>{ document.getElementById('topo-wrap').innerHTML='<p style="color:red;padding:12px">Error: '+esc(String(e))+'</p>'; });
+
+  function build(data){
+    allPaths = data.paths || [];
+
+    const svgEl = document.getElementById('topo-svg');
+    const W = svgEl.parentElement.clientWidth  || 700;
+    const H = svgEl.parentElement.clientHeight || 640;
+    svgEl.setAttribute('viewBox', `0 0 ${W} ${H}`);
+
+    const svg = d3.select(svgEl);
+
+    // Glow filter for cable highlight
+    const defs = svg.append('defs');
+    const filter = defs.append('filter').attr('id','glow').attr('x','-50%').attr('y','-50%').attr('width','200%').attr('height','200%');
+    filter.append('feGaussianBlur').attr('stdDeviation','3').attr('result','blur');
+    const merge = filter.append('feMerge');
+    merge.append('feMergeNode').attr('in','blur');
+    merge.append('feMergeNode').attr('in','blur');
+    merge.append('feMergeNode').attr('in','SourceGraphic');
+
+    const gRoot = svg.append('g');
+
+    zoomBehavior = d3.zoom().scaleExtent([0.15,5]).on('zoom', e=>gRoot.attr('transform',e.transform));
+    // Mouse wheel = zoom, background drag = pan
+    svg.call(zoomBehavior);
+    // Visual hint
+    svg.append('text')
+      .attr('x', W-10).attr('y', H-10)
+      .attr('text-anchor','end').attr('font-size','10px')
+      .attr('fill','#94a3b8').attr('pointer-events','none')
+      .text('Scroll to zoom · drag background to pan · Escape to reset');
+
+    // Click on SVG background (not on a node) → reset
+    svg.on('click', function(e){
+      if(e.target === svgEl) selectDevice(null);
+    });
+    // Escape → reset
+    document.addEventListener('keydown', function(e){
+      if(e.key === 'Escape') selectDevice(null);
+    });
+
+    // Colour read directly from NetBox (d.color)
+    function roleColor(d){ return d.color || "#94a3b8"; }
+
+    // Prepare data
+    nodesData = (data.nodes||[]).map(n=>({...n, x:W/2+(Math.random()-0.5)*200, y:H/2+(Math.random()-0.5)*200}));
+    const nodeById = {};
+    nodesData.forEach(n=>nodeById[n.id]=n);
+
+    linksData = (data.edges||[]).map(e=>({
+      id:e.id,
+      source: nodeById[e.source],
+      target: nodeById[e.target],
+      color: e.color || '',
+    })).filter(l=>l.source&&l.target);
+
+    // Strict SVG render order: links first, nodes next, labels on top
+    // D3 best practice: no reordered intermediate groups, everything directly in gRoot
+    const DEFAULT_CABLE_COLOR = '#94a3b8';
+
+    // 1. Links (bottom layer)
+    gLinks = gRoot.append('g').attr('class','layer-links');
+    const linkEl = gLinks.selectAll('line').data(linksData).join('line')
+      .attr('stroke', d => d.color || DEFAULT_CABLE_COLOR)
+      .attr('stroke-width', 1.8)
+      .attr('stroke-linecap','round')
+      .attr('opacity', 0.85)
+      .style('pointer-events','none');
+
+    // 2. Nodes (above links)
+    gNodes = gRoot.append('g').attr('class','layer-nodes');
+
+    // 3. Labels (topmost layer)
+    gLabels = gRoot.append('g').attr('class','layer-labels').attr('style','pointer-events:none');
+
+    // Nodes — coloured by NetBox device role
+    const nodeEl = gNodes.selectAll('g').data(nodesData).join('g')
+      .attr('class','topo-node')
+      .style('cursor','pointer')
+      .call(d3.drag()
+        .on('start',(e,d)=>{ if(!e.active)simulation.alphaTarget(0.3).restart(); d.fx=d.x;d.fy=d.y; })
+        .on('drag', (e,d)=>{ d.fx=e.x; d.fy=e.y; })
+        .on('end',  (e,d)=>{ if(!e.active)simulation.alphaTarget(0); d.fx=null;d.fy=null; }))
+      .on('click', (_,d)=>selectDevice(d.pk));
+
+    // Rounded square for local devices, circle for external ones
+    nodeEl.each(function(d){
+      const g = d3.select(this);
+      if(d.external){
+        g.append('circle')
+          .attr('r', 13)
+          .attr('fill', roleColor(d))
+          .attr('stroke','#333')
+          .attr('stroke-width', 1.5)
+          .attr('opacity', 0.55);
+      } else {
+        g.append('rect')
+          .attr('x', -13).attr('y', -13)
+          .attr('width', 26).attr('height', 26)
+          .attr('rx', 5).attr('ry', 5)
+          .attr('fill', roleColor(d))
+          .attr('stroke','#333')
+          .attr('stroke-width', 1.5);
+      }
+    });
+
+    // Labels — created in gLabels, separately
+    const wrap = s=>{
+      const words=s.split(/[-_\s]/), maxLen=16;
+      let lines=[],cur='';
+      words.forEach(w=>{ const t=cur?cur+' '+w:w; if(t.length>maxLen&&cur){lines.push(cur);cur=w;}else{cur=t;} });
+      if(cur)lines.push(cur);
+      return lines.slice(0,3);
+    };
+
+    const labelEl = gLabels.selectAll('g').data(nodesData).join('g').attr('pointer-events','none');
+    labelEl.each(function(d){
+      const g = d3.select(this);
+      const lines = wrap(d.label);
+      d._lines = lines.length;
+      lines.forEach((line,i)=>{
+        g.append('text')
+          .attr('text-anchor','middle')
+          .attr('font-size','11px')
+          .attr('font-family','inherit')
+          .attr('fill','var(--tblr-body-color,#1d273b)')
+          .attr('dy', i*14)
+          .text(line);
+      });
+    });
+
+
+    // Simulation
+    // Adaptive repulsion based on node count
+    const nodeCount = nodesData.length;
+    const defaultRepulsion = nodeCount > 100 ? -2000 : nodeCount > 50 ? -1000 : nodeCount > 20 ? -500 : -350;
+    const defaultDistance  = nodeCount > 100 ? 250  : nodeCount > 50 ? 180  : nodeCount > 20 ? 140  : 110;
+    document.getElementById('slider-repulsion').value = Math.abs(defaultRepulsion);
+
+    simulation = d3.forceSimulation(nodesData)
+      .force('link', d3.forceLink(linksData).id(d=>d.id).distance(defaultDistance).strength(0.7))
+      .force('charge', d3.forceManyBody().strength(-Math.abs(defaultRepulsion)).distanceMax(600))
+      .force('center', d3.forceCenter(W/2, H/2).strength(0.08))
+      .force('collide', d3.forceCollide(50))
+      .force('x', d3.forceX(W/2).strength(0.02))
+      .force('y', d3.forceY(H/2).strength(0.02))
+      .on('tick', ()=>{
+        const r = 13;
+        linkEl
+          .attr('x1',d=>{ const dx=d.target.x-d.source.x,dy=d.target.y-d.source.y,dist=Math.sqrt(dx*dx+dy*dy)||1; return d.source.x+dx/dist*r; })
+          .attr('y1',d=>{ const dx=d.target.x-d.source.x,dy=d.target.y-d.source.y,dist=Math.sqrt(dx*dx+dy*dy)||1; return d.source.y+dy/dist*r; })
+          .attr('x2',d=>{ const dx=d.source.x-d.target.x,dy=d.source.y-d.target.y,dist=Math.sqrt(dx*dx+dy*dy)||1; return d.target.x+dx/dist*r; })
+          .attr('y2',d=>{ const dx=d.source.x-d.target.x,dy=d.source.y-d.target.y,dist=Math.sqrt(dx*dx+dy*dy)||1; return d.target.y+dy/dist*r; });
+
+        nodeEl.attr('transform',d=>`translate(${d.x},${d.y})`);
+
+        // Label offset: opposite to neighbour centroid
+        labelEl.attr('transform',d=>{
+          const nb = linksData.filter(l=>l.source===d||l.target===d);
+          let ox=0, oy=-(13+5+d._lines*14); // default: above
+          if(nb.length>0){
+            let cx=0,cy=0;
+            nb.forEach(l=>{ const o=l.source===d?l.target:l.source; cx+=o.x-d.x; cy+=o.y-d.y; });
+            const len=Math.sqrt(cx*cx+cy*cy)||1;
+            const ux=-cx/len, uy=-cy/len; // opposite direction
+            const r=18;
+            ox = ux*r;
+            // uy>0 = label downward → add label height
+            oy = uy*r + (uy>0 ? 0 : -(d._lines*14));
+          }
+          return `translate(${d.x+ox},${d.y+oy})`;
+        });
+      });
+
+    // Dynamic legend — built after nodesData is populated
+    {
+      const seen = new Map();
+      nodesData.forEach(d=>{
+        if(d.role && d.color && !seen.has(d.color)) seen.set(d.color, d.role);
+      });
+      seen.set('#94a3b8', 'Unknown');
+      const LEGEND = Array.from(seen, ([color, label]) => ({color, label}))
+        .sort((a,b)=>a.label.localeCompare(b.label));
+
+      // +2 rows for shape legend
+      const totalRows = LEGEND.length + 3;
+      const leg = svg.append('g').attr('transform',`translate(12,${H-10-totalRows*16})`);
+
+      // Colour legend (roles)
+      LEGEND.forEach((item,i)=>{
+        const g = leg.append('g').attr('transform',`translate(0,${i*16})`);
+        g.append('circle').attr('r',5).attr('fill',item.color).attr('stroke','#333').attr('stroke-width',0.5);
+        g.append('text').attr('x',12).attr('y',4)
+          .attr('font-size','10px').attr('fill','var(--tblr-body-color,#1d273b)').text(item.label);
+      });
+
+      // Separator
+      const sepY = LEGEND.length * 16 + 4;
+      leg.append('line').attr('x1',0).attr('y1',sepY).attr('x2',90).attr('y2',sepY)
+        .attr('stroke','#d1d5db').attr('stroke-width',1);
+
+      // Shape legend
+      const shapeY = LEGEND.length * 16 + 10;
+      const gLocal = leg.append('g').attr('transform',`translate(0,${shapeY})`);
+      gLocal.append('rect').attr('x',-5).attr('y',-5).attr('width',10).attr('height',10)
+        .attr('rx',2).attr('fill','#6b7280').attr('stroke','#333').attr('stroke-width',0.5);
+      gLocal.append('text').attr('x',12).attr('y',4)
+        .attr('font-size','10px').attr('fill','var(--tblr-body-color,#1d273b)').text('In this location');
+
+      const gExt = leg.append('g').attr('transform',`translate(0,${shapeY+16})`);
+      gExt.append('circle').attr('r',5).attr('fill','#6b7280').attr('stroke','#333').attr('stroke-width',0.5);
+      gExt.append('text').attr('x',12).attr('y',4)
+        .attr('font-size','10px').attr('fill','var(--tblr-body-color,#1d273b)').text('External');
+    }
+
+    // Highlight
+    function selectDevice(pk){
+      if(pk===null){
+        nodeEl.each(function(d){
+        const g = d3.select(this);
+        g.select('circle').attr('fill', roleColor(d)).attr('r', 13).attr('opacity', d.external?0.55:1);
+        g.select('rect').attr('fill', roleColor(d))
+          .attr('x',-13).attr('y',-13).attr('width',26).attr('height',26).attr('opacity',1);
+      });
+        linkEl.attr('stroke', d=>d.color||DEFAULT_CABLE_COLOR).attr('stroke-width',1.5).attr('opacity',0.75).attr('filter',null);
+        labelEl.attr('opacity',1);
+        panel.innerHTML='<p style="color:var(--tblr-secondary);margin:0;">Click on a device.</p>';
+        return;
+      }
+      const matching = allPaths.filter(p=>(p.device_pks||[]).includes(pk));
+      const inv = new Set([pk]);
+      matching.forEach(p=>(p.device_pks||[]).forEach(x=>inv.add(x)));
+
+      nodeEl.each(function(d){
+        const g = d3.select(this);
+        const fill = d.pk===pk ? '#f59f00' : (inv.has(d.pk) ? roleColor(d) : '#d1d5db');
+        const opacity = inv.has(d.pk) ? 1 : 0.15;
+        g.select('circle').attr('fill', fill).attr('r', d.pk===pk ? 17 : 13).attr('opacity', opacity);
+        g.select('rect')
+          .attr('fill', fill)
+          .attr('x', d.pk===pk?-17:-13).attr('y', d.pk===pk?-17:-13)
+          .attr('width', d.pk===pk?34:26).attr('height', d.pk===pk?34:26)
+          .attr('opacity', opacity);
+      });
+      labelEl.attr('opacity',d=>inv.has(d.pk)?1:0.2);
+      linkEl
+        .attr('stroke', d=>(inv.has(d.source.pk)&&inv.has(d.target.pk)) ? (d.color||DEFAULT_CABLE_COLOR) : '#e2e8f0')
+        .attr('stroke-width', d=>(inv.has(d.source.pk)&&inv.has(d.target.pk)) ? 3 : 1)
+        .attr('opacity', d=>(inv.has(d.source.pk)&&inv.has(d.target.pk)) ? 1 : 0.12)
+        .attr('filter', d=>(inv.has(d.source.pk)&&inv.has(d.target.pk)) ? 'url(#glow)' : null);
+
+      const nd = nodesData.find(d=>d.pk===pk);
+      const titleLink = nd && nd.url
+        ? `<a href="${esc(nd.url)}" style="font-weight:600;font-size:14px;margin-bottom:8px;display:block;color:var(--tblr-primary);text-decoration:none;">${esc(nd.label)}</a>`
+        : `<div style="font-weight:600;font-size:14px;margin-bottom:8px;">${esc(nd?nd.label:'')}</div>`;
+      let html = titleLink;
+      if(!matching.length){
+        html+=`<p style="color:var(--tblr-secondary);font-size:12px;">No cabled path.</p>`;
+      } else {
+        html+=`<div style="color:var(--tblr-secondary);font-size:11px;margin-bottom:8px;">${matching.length} path(s)</div>`;
+        matching.forEach((path,i)=>{
+          html+=`<div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--tblr-border-color);">`;
+          html+=`<div style="font-size:11px;font-weight:600;color:var(--tblr-secondary);margin-bottom:3px;">Path ${i+1}</div>`;
+          (path.elements||[]).forEach(el=>{
+            if(el.kind==='port'){
+              const hi = el.device_pk===pk ? 'color:var(--tblr-warning);font-weight:600;' : '';
+              // Device name → device page
+              const devHtml = el.device
+                ? (el.device_url
+                    ? `<a href="${esc(el.device_url)}" style="font-weight:700;color:inherit;"><strong>${esc(el.device)}</strong></a>`
+                    : `<strong>${esc(el.device)}</strong>`)
+                  + ' · '
+                : '';
+              // Port name → port page
+              const portHtml = el.url
+                ? `<a href="${esc(el.url)}" style="color:inherit;text-decoration:underline;">${esc(el.name||'')}</a>`
+                : esc(el.name||'');
+              html+=`<div style="font-size:12px;line-height:1.6;${hi}">${devHtml}${portHtml}</div>`;
+            } else {
+              html+=`<div style="font-size:11px;color:var(--tblr-secondary);padding-left:8px;">↳ ${esc(el.name||'cable')}</div>`;
+            }
+          });
+          html+=`</div>`;
+        });
+      }
+      panel.innerHTML=html;
+    }
+
+    window._topoSelect = selectDevice;
+    // Reset: background click or Escape (see above)
+    document.getElementById('btn-fit').onclick=()=>{
+      if(!nodesData || nodesData.length===0) return;
+      // Compute actual bounding box of nodes
+      let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+      nodesData.forEach(d=>{ x0=Math.min(x0,d.x);y0=Math.min(y0,d.y);x1=Math.max(x1,d.x);y1=Math.max(y1,d.y); });
+      const pad=60, gw=x1-x0+pad*2, gh=y1-y0+pad*2;
+      const scale=Math.min(0.95, Math.min(W/gw, H/gh));
+      const tx=W/2 - scale*(x0+x1)/2;
+      const ty=H/2 - scale*(y0+y1)/2;
+      svg.transition().duration(500).call(zoomBehavior.transform, d3.zoomIdentity.translate(tx,ty).scale(scale));
+    };
+    document.getElementById('btn-zin').onclick=()=>svg.transition().duration(200).call(zoomBehavior.scaleBy, 1.3);
+    document.getElementById('btn-zout').onclick=()=>svg.transition().duration(200).call(zoomBehavior.scaleBy, 0.77);
+
+    document.getElementById('slider-repulsion').addEventListener('input', function(){
+      const val = -Math.abs(parseInt(this.value));
+      simulation.force('charge', d3.forceManyBody().strength(val).distanceMax(1200));
+      simulation.alpha(0.4).restart();
+    });
+
+    // --- Trace table ---
+    function buildTable(){
+      // Compute the max number of intermediate steps
+      // Each row = 1 path. Columns: Source device | Source port | Step N... | Dest device | Dest port
+      const rows = [];
+      allPaths.forEach(path=>{
+        const ports = (path.elements||[]).filter(e=>e.kind==='port');
+        if(ports.length < 2) return;
+        const origin = ports[0];
+        const dest   = ports[ports.length-1];
+        const middle = ports.slice(1, -1); // intermediate steps
+        rows.push({ origin, middle, dest, elements: path.elements });
+      });
+
+      // Max number of intermediate steps (grouped by device)
+      let maxNext = 0;
+      rows.forEach(r=>{
+        // Group intermediate ports by consecutive device
+        const devSeq = [];
+        r.middle.forEach(p=>{ if(!devSeq.length||devSeq[devSeq.length-1].device!==p.device) devSeq.push(p); });
+        r._devSeq = devSeq;
+        maxNext = Math.max(maxNext, devSeq.length);
+      });
+
+      // Thead with sorting
+      const thStyle = 'border:1px solid var(--tblr-border-color); padding:6px 8px; background:var(--tblr-light,#f8f9fa); font-weight:600; white-space:nowrap; cursor:pointer; user-select:none;';
+      const colNames = ['Source device','Source port',...Array.from({length:maxNext},(_,i)=>`Step ${i+1}`),'Destination device','Destination port'];
+      let thead = '<tr>';
+      colNames.forEach((name,i)=>{
+        thead += `<th style="${thStyle}" onclick="window._topoSort(${i})">`;
+        thead += `${name} <span id="si-${i}" style="font-size:10px;color:#94a3b8;">⇅</span></th>`;
+      });
+      thead += '</tr>';
+      document.getElementById('trace-thead').innerHTML = thead;
+
+      // Tbody
+      const cellStyle = 'border:1px solid var(--tblr-border-color); padding:5px 8px; vertical-align:top;';
+      const dimStyle  = 'border:1px solid var(--tblr-border-color); padding:5px 8px; color:var(--tblr-secondary); vertical-align:top;';
+
+      function textOfCell(r, col){
+        if(col===0) return r.origin.device||'';
+        if(col===1) return r.origin.name||'';
+        if(col===colNames.length-1) return r.dest.name||'';
+        if(col===colNames.length-2) return r.dest.device||'';
+        const step = r._devSeq[col-2];
+        return step ? (step.device||step.name||'') : '';
+      }
+
+      function deviceLink(port, style){ 
+        return port.device_url
+          ? `<a href="${esc(port.device_url)}" style="${style}">${esc(port.device||'')}</a>`
+          : esc(port.device||'');
+      }
+      function portLink(port, style){
+        return port.url
+          ? `<a href="${esc(port.url)}" style="${style}">${esc(port.name||'')}</a>`
+          : esc(port.name||'');
+      }
+
+      function renderTbody(){
+        let tbody = '';
+        const emptyStyle = 'border:1px solid var(--tblr-border-color); padding:5px 8px; background:var(--tblr-bg-surface-secondary,#f1f3f5); color:#c1c7cd; text-align:center;';
+        rows.forEach(r=>{
+          const nSteps = r._devSeq.length;
+          const missing = maxNext - nSteps;
+          tbody += '<tr>';
+          tbody += `<td style="${cellStyle}">${deviceLink(r.origin,'color:var(--tblr-primary);')}</td>`;
+          tbody += `<td style="${cellStyle}">${portLink(r.origin,'color:var(--tblr-body-color);')}</td>`;
+          r._devSeq.forEach(step=>{
+            const dev = step.device ? `<strong>${deviceLink(step,'color:var(--tblr-body-color);font-weight:700;')}</strong><br>` : '';
+            const por = portLink(step,'color:var(--tblr-secondary);');
+            tbody += `<td style="${cellStyle}">${dev}${por}</td>`;
+          });
+          for(let i=0; i<missing; i++){
+            tbody += `<td style="${emptyStyle}">—</td>`;
+          }
+          tbody += `<td style="${dimStyle}">${deviceLink(r.dest,'color:var(--tblr-secondary);')}</td>`;
+          tbody += `<td style="${dimStyle}">${portLink(r.dest,'color:var(--tblr-body-color);')}</td>`;
+          tbody += '</tr>';
+        });
+        document.getElementById('trace-tbody').innerHTML = tbody;
+      }
+
+      let _sortCol=-1, _sortAsc=true;
+      window._topoSort = function(col){
+        _sortAsc = _sortCol===col ? !_sortAsc : true;
+        _sortCol = col;
+        colNames.forEach((_,i)=>{ const ic=document.getElementById('si-'+i); if(ic) ic.textContent='⇅'; });
+        const ic = document.getElementById('si-'+col);
+        if(ic) ic.textContent = _sortAsc ? '▲' : '▼';
+        // Secondary sort: source device → source port asc; dest device → dest port asc
+        const isOriginDevice = (col===0);
+        const isDestDevice = (col===colNames.length-2);
+        rows.sort((a,b)=>{
+          const va=textOfCell(a,col).toLowerCase(), vb=textOfCell(b,col).toLowerCase();
+          let cmp = _sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+          if(cmp===0 && isOriginDevice){
+            cmp = (a.origin.name||'').toLowerCase().localeCompare((b.origin.name||'').toLowerCase());
+          } else if(cmp===0 && isDestDevice){
+            cmp = (a.dest.name||'').toLowerCase().localeCompare((b.dest.name||'').toLowerCase());
+          }
+          return cmp;
+        });
+        renderTbody();
+      };
+
+      renderTbody();
+    }
+
+    function exportCsv(){
+      const table = document.getElementById('trace-table');
+      const rows = Array.from(table.querySelectorAll('tr'));
+      const csv = rows.map(r=>
+        Array.from(r.querySelectorAll('th,td')).map(c=>'"'+c.innerText.replace(/"/g,'""')+'"').join(',')
+      ).join('\n');
+      const a = document.createElement('a');
+      a.href = 'data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
+      a.download = 'cable_traces.csv';
+      a.click();
+    }
+
+    const modal = document.getElementById('trace-modal');
+    document.getElementById('btn-table').onclick=()=>{
+      buildTable();
+      modal.style.display='block';
+    };
+    document.getElementById('btn-close-modal').onclick=()=>{ modal.style.display='none'; };
+    modal.addEventListener('click',e=>{ if(e.target===modal) modal.style.display='none'; });
+    document.getElementById('btn-export-csv').onclick=exportCsv;
+  }
+})();
+</script>
+{% endif %}
+{% endblock %}
