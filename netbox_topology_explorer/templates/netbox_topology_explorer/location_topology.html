@@ -9,7 +9,7 @@
         {% if device_count == 0 %}
           <p class="text-muted p-3">No devices in this location.</p>
         {% else %}
-          <div style="display:flex; height:640px; overflow:hidden;">
+          <div id="topo-row" style="display:flex; height:640px; overflow:hidden;">
             <div id="topo-wrap" style="flex:1 1 auto; position:relative; min-width:0;">
               <div style="position:absolute; top:10px; left:10px; z-index:10; display:flex; gap:6px;">
                 <button id="btn-fit"        style="background:var(--tblr-card-bg,#fff); border:1px solid var(--tblr-border-color); border-radius:6px; padding:4px 10px; font-size:12px; cursor:pointer; color:var(--tblr-body-color);">&#x2922; Center</button>
@@ -22,7 +22,7 @@
                 </div>
               </div>
               <div style="position:absolute; top:10px; right:10px; z-index:10;">
-                <button id="btn-table" style="background:var(--tblr-primary,#2f6fed); border:none; border-radius:6px; padding:4px 12px; font-size:12px; cursor:pointer; color:#fff; font-weight:500;">&#9776; Trace table</button>
+                <button id="btn-table" class="btn btn-primary btn-sm">&#9776; Trace table</button>
               </div>
               <!-- Trace modal -->
               <div id="trace-modal" style="display:none; position:absolute; inset:0; z-index:100; background:rgba(0,0,0,0.45); overflow:auto; padding:20px;">
@@ -64,7 +64,25 @@
   let gLinks, gNodes, gLabels;
   let nodesData, linksData;
 
+  // Stretch the graph row to fill the rest of the browser tab below it,
+  // whatever NetBox chrome (header/tabs/breadcrumb) sits above the card.
+  const topoRow = document.getElementById('topo-row');
+  function resizeTopoRow(){
+    const top = topoRow.getBoundingClientRect().top;
+    topoRow.style.height = Math.max(400, window.innerHeight - top - 16) + 'px';
+  }
+  resizeTopoRow();
+  window.addEventListener('resize', resizeTopoRow);
+
   function esc(s){ return s==null?'':String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  function isDarkTheme(){
+    return document.documentElement.getAttribute('data-bs-theme') === 'dark';
+  }
+  // Shared glow colour (tuned per theme for contrast against the canvas/panel)
+  // used as a shadow on top of a cable's own colour, so white/black cables
+  // stay visible against a same-toned background.
+  function cableHighlightColor(){ return isDarkTheme() ? '#a9b4c9' : '#475569'; }
 
   // Front/rear ports on a patch panel share the same hop and can carry the same
   // name, so callers must show this tag or the two entries look duplicated.
@@ -129,11 +147,14 @@
       } else {
         const color = b.color || '#94a3b8';
         const label = 'Cable ' + (b.name||'');
-        html += `<div style="display:flex;align-items:center;gap:6px;padding:4px 8px;">`+
-                `<span style="width:12px;height:2px;flex-shrink:0;background:${esc(color)};"></span>`+
-                (b.url
-                  ? `<a href="${esc(b.url)}" style="font-size:11px;color:var(--tblr-secondary);text-decoration:none;">${esc(label)}</a>`
-                  : `<span style="font-size:11px;color:var(--tblr-secondary);">${esc(label)}</span>`)+
+        const labelHtml = b.url
+          ? `<a href="${esc(b.url)}" style="font-size:11px;color:var(--tblr-secondary);text-decoration:none;">${esc(label)}</a>`
+          : `<span style="font-size:11px;color:var(--tblr-secondary);">${esc(label)}</span>`;
+        // Vertical connector centered under the device blocks above/below
+        // (NetBox-trace style), with the cable label to its left.
+        html += `<div style="position:relative;height:26px;">`+
+                `<div style="position:absolute;left:50%;top:0;bottom:0;width:2px;transform:translateX(-50%);background:${esc(color)};box-shadow:0 0 2px 0 ${esc(cableHighlightColor())};"></div>`+
+                `<div style="position:absolute;right:calc(50% + 8px);top:50%;transform:translateY(-50%);white-space:nowrap;">${labelHtml}</div>`+
                 `</div>`;
       }
     });
@@ -165,7 +186,7 @@
       .attr('x', W-10).attr('y', H-10)
       .attr('text-anchor','end').attr('font-size','10px')
       .attr('fill','#94a3b8').attr('pointer-events','none')
-      .text('Scroll to zoom · drag background to pan · Escape to reset');
+      .text('Scroll to zoom · Drag background to pan · Escape to deselect');
 
     // Click on SVG background (not on a node) → reset
     svg.on('click', function(e){
@@ -175,6 +196,10 @@
     document.addEventListener('keydown', function(e){
       if(e.key === 'Escape') selectDevice(null);
     });
+    // Re-apply cable colours if the user flips the light/dark theme toggle
+    // without reloading, so the highlight stays theme-correct.
+    new MutationObserver(()=>selectDevice(selectedPk))
+      .observe(document.documentElement, {attributes:true, attributeFilter:['data-bs-theme']});
 
     // Colour read directly from NetBox (d.color)
     function roleColor(d){ return d.color || "#94a3b8"; }
@@ -201,15 +226,27 @@
     // Strict SVG render order: links first, nodes next, labels on top
     // D3 best practice: no reordered intermediate groups, everything directly in gRoot
     const DEFAULT_CABLE_COLOR = '#94a3b8';
+    function cableColor(d){ return d.color || DEFAULT_CABLE_COLOR; }
+    function cableMutedColor(){ return isDarkTheme() ? '#333a4d' : '#dde3ec'; }
+    const CABLE_BASE_WIDTH = 1.8, CABLE_BASE_OPACITY = 0.85;
+    const CABLE_GLOW = d => `drop-shadow(0 0 3px ${cableHighlightColor()})`;
 
     // 1. Links (bottom layer)
     gLinks = gRoot.append('g').attr('class','layer-links');
     const linkEl = gLinks.selectAll('line').data(linksData).join('line')
-      .attr('stroke', d => d.color || DEFAULT_CABLE_COLOR)
-      .attr('stroke-width', 1.8)
       .attr('stroke-linecap','round')
-      .attr('opacity', 0.85)
       .style('pointer-events','none');
+
+    // Resets every cable to its own colour with the shared glow. Called on
+    // init and whenever a selection is cleared, so the two states can never
+    // drift apart.
+    function resetLinks(){
+      linkEl.attr('stroke', cableColor)
+        .attr('stroke-width', CABLE_BASE_WIDTH)
+        .attr('opacity', CABLE_BASE_OPACITY)
+        .style('filter', CABLE_GLOW);
+    }
+    resetLinks();
 
     // 2. Nodes (above links)
     gNodes = gRoot.append('g').attr('class','layer-nodes');
@@ -249,10 +286,12 @@
     });
 
     // Labels — created in gLabels, separately
+    // Wraps on hyphen/underscore/space boundaries without discarding them,
+    // so the label still reads exactly like the object's real name.
     const wrap = s=>{
-      const words=s.split(/[-_\s]/), maxLen=16;
+      const tokens=s.split(/([-_\s])/).filter(t=>t!==''), maxLen=16;
       let lines=[],cur='';
-      words.forEach(w=>{ const t=cur?cur+' '+w:w; if(t.length>maxLen&&cur){lines.push(cur);cur=w;}else{cur=t;} });
+      tokens.forEach(t=>{ const next=cur+t; if(next.length>maxLen&&cur){lines.push(cur);cur=t;}else{cur=next;} });
       if(cur)lines.push(cur);
       return lines.slice(0,3);
     };
@@ -333,8 +372,8 @@
       const seen = new Map();
       nodesData.forEach(d=>{
         if(d.role && d.color && !seen.has(d.color)) seen.set(d.color, d.role);
+        else if(!d.role || !d.color) seen.set('#94a3b8', 'Unknown');
       });
-      seen.set('#94a3b8', 'Unknown');
       const LEGEND = Array.from(seen, ([color, label]) => ({color, label}))
         .sort((a,b)=>a.label.localeCompare(b.label));
 
@@ -350,13 +389,13 @@
           .attr('font-size','10px').attr('fill','var(--tblr-body-color,#1d273b)').text(item.label);
       });
 
-      // Separator
-      const sepY = LEGEND.length * 16 + 4;
+      // Separator — centred in the reserved gap row between the two sections
+      const sepY = LEGEND.length * 16;
       leg.append('line').attr('x1',0).attr('y1',sepY).attr('x2',90).attr('y2',sepY)
         .attr('stroke','#d1d5db').attr('stroke-width',1);
 
       // Shape legend
-      const shapeY = LEGEND.length * 16 + 10;
+      const shapeY = (LEGEND.length + 1) * 16;
       const gLocal = leg.append('g').attr('transform',`translate(0,${shapeY})`);
       gLocal.append('rect').attr('x',-5).attr('y',-5).attr('width',10).attr('height',10)
         .attr('rx',2).attr('fill','#6b7280').attr('stroke','#333').attr('stroke-width',0.5);
@@ -370,15 +409,19 @@
     }
 
     // Highlight
+    let selectedPk = null;
     function selectDevice(pk){
+      selectedPk = pk;
       if(pk===null){
         nodeEl.each(function(d){
         const g = d3.select(this);
-        g.select('circle').attr('fill', roleColor(d)).attr('r', 13).attr('opacity', d.external?0.55:1);
+        g.select('circle').attr('fill', roleColor(d)).attr('r', 13).attr('opacity', d.external?0.55:1)
+          .attr('stroke','#333').attr('stroke-width',1.5);
         g.select('rect').attr('fill', roleColor(d))
-          .attr('x',-13).attr('y',-13).attr('width',26).attr('height',26).attr('opacity',1);
+          .attr('x',-13).attr('y',-13).attr('width',26).attr('height',26).attr('opacity',1)
+          .attr('stroke','#333').attr('stroke-width',1.5);
       });
-        linkEl.attr('stroke', d=>d.color||DEFAULT_CABLE_COLOR).attr('stroke-width',1.5).attr('opacity',0.75).attr('filter',null);
+        resetLinks();
         labelEl.attr('opacity',1);
         panel.innerHTML='<p style="color:var(--tblr-secondary);margin:0;">Click on a device.</p>';
         return;
@@ -389,21 +432,25 @@
 
       nodeEl.each(function(d){
         const g = d3.select(this);
-        const fill = d.pk===pk ? '#f59f00' : (inv.has(d.pk) ? roleColor(d) : '#d1d5db');
+        const fill = inv.has(d.pk) ? roleColor(d) : '#d1d5db';
         const opacity = inv.has(d.pk) ? 1 : 0.15;
-        g.select('circle').attr('fill', fill).attr('r', d.pk===pk ? 17 : 13).attr('opacity', opacity);
+        const ring = d.pk===pk ? '#f59f00' : '#333';
+        const ringWidth = d.pk===pk ? 3 : 1.5;
+        g.select('circle').attr('fill', fill).attr('r', d.pk===pk ? 17 : 13).attr('opacity', opacity)
+          .attr('stroke', ring).attr('stroke-width', ringWidth);
         g.select('rect')
           .attr('fill', fill)
           .attr('x', d.pk===pk?-17:-13).attr('y', d.pk===pk?-17:-13)
           .attr('width', d.pk===pk?34:26).attr('height', d.pk===pk?34:26)
-          .attr('opacity', opacity);
+          .attr('opacity', opacity)
+          .attr('stroke', ring).attr('stroke-width', ringWidth);
       });
       labelEl.attr('opacity',d=>inv.has(d.pk)?1:0.2);
       linkEl
-        .attr('stroke', d=>(inv.has(d.source.pk)&&inv.has(d.target.pk)) ? (d.color||DEFAULT_CABLE_COLOR) : '#e2e8f0')
+        .attr('stroke', d=>(inv.has(d.source.pk)&&inv.has(d.target.pk)) ? cableColor(d) : cableMutedColor())
         .attr('stroke-width', d=>(inv.has(d.source.pk)&&inv.has(d.target.pk)) ? 3 : 1)
-        .attr('opacity', d=>(inv.has(d.source.pk)&&inv.has(d.target.pk)) ? 1 : 0.12)
-        .style('filter', d=>(inv.has(d.source.pk)&&inv.has(d.target.pk)) ? 'drop-shadow(0 0 3px currentColor)' : null);
+        .attr('opacity', d=>(inv.has(d.source.pk)&&inv.has(d.target.pk)) ? 1 : 0.4)
+        .style('filter', d=>(inv.has(d.source.pk)&&inv.has(d.target.pk)) ? CABLE_GLOW(d) : null);
 
       const nd = nodesData.find(d=>d.pk===pk);
       const titleLink = nd && nd.url
