@@ -24,6 +24,9 @@ class LocationTopologyView(generic.ObjectView):
     def get_extra_context(self, request, instance):
         return {
             "device_count": Device.objects.filter(location=instance).count(),
+            "data_url": f"/plugins/topology/locations/{instance.pk}/data/",
+            "empty_message": "No devices in this location.",
+            "scope_label": "location",
         }
 
 
@@ -59,7 +62,10 @@ class TenantTopologyView(generic.ObjectView):
         locations = Location.objects.filter(tenant=instance)
         return {
             "location_count": locations.count(),
+            "device_count": Device.objects.filter(location__in=locations).count(),
             "data_url": f"/plugins/topology/tenants/{instance.pk}/data/",
+            "empty_message": "No devices found for this tenant.",
+            "scope_label": "tenant",
         }
 
 
@@ -92,7 +98,10 @@ class TenantGroupTopologyView(generic.ObjectView):
         locations = Location.objects.filter(tenant__in=tenant_pks)
         return {
             "location_count": locations.count(),
+            "device_count": Device.objects.filter(location__in=locations).count(),
             "data_url": f"/plugins/topology/tenant-groups/{instance.pk}/data/",
+            "empty_message": "No devices found for this tenant group.",
+            "scope_label": "tenant group",
         }
 
 
