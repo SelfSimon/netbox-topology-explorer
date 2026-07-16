@@ -58,7 +58,7 @@
                     </div>
                   </div>
                   <div style="overflow-x:auto;">
-                    <table id="trace-table" style="width:100%; border-collapse:collapse; font-size:12px;">
+                    <table id="trace-table" class="table table-hover table-sm" style="font-size:12px;">
                       <thead id="trace-thead"></thead>
                       <tbody id="trace-tbody"></tbody>
                     </table>
@@ -602,20 +602,22 @@
         maxNext = Math.max(maxNext, devSeq.length);
       });
 
-      // Thead with sorting
-      const thStyle = 'border:1px solid var(--tblr-border-color); padding:6px 8px; background:var(--tblr-light,#f8f9fa); font-weight:600; white-space:nowrap; cursor:pointer; user-select:none;';
+      // Thead with sorting. No colours/background here: the <table> carries
+      // NetBox's own `table` classes, so header contrast is governed by
+      // NetBox's theme CSS rather than plugin-authored inline styles.
+      const thStyle = 'white-space:nowrap; cursor:pointer; user-select:none;';
       const colNames = [TXT_SOURCE_DEVICE,TXT_SOURCE_PORT,...Array.from({length:maxNext},(_,i)=>`${TXT_STEP} ${i+1}`),TXT_DEST_DEVICE,TXT_DEST_PORT];
       let thead = '<tr>';
       colNames.forEach((name,i)=>{
         thead += `<th style="${thStyle}" onclick="window._topoSort(${i})">`;
-        thead += `${name} <span id="si-${i}" style="font-size:10px;color:#94a3b8;">⇅</span></th>`;
+        thead += `${name} <span id="si-${i}" class="text-muted" style="font-size:10px;">⇅</span></th>`;
       });
       thead += '</tr>';
       document.getElementById('trace-thead').innerHTML = thead;
 
       // Tbody
-      const cellStyle = 'border:1px solid var(--tblr-border-color); padding:5px 8px; vertical-align:top;';
-      const dimStyle  = 'border:1px solid var(--tblr-border-color); padding:5px 8px; color:var(--tblr-secondary); vertical-align:top;';
+      const cellStyle = 'vertical-align:top;';
+      const dimStyle  = 'vertical-align:top;';
 
       function textOfCell(r, col){
         if(col===0) return r.origin.device||'';
@@ -639,7 +641,6 @@
 
       function renderTbody(){
         let tbody = '';
-        const emptyStyle = 'border:1px solid var(--tblr-border-color); padding:5px 8px; background:var(--tblr-bg-surface-secondary,#f1f3f5); color:#c1c7cd; text-align:center;';
         rows.forEach(r=>{
           const nSteps = r._devSeq.length;
           const missing = maxNext - nSteps;
@@ -652,10 +653,10 @@
             tbody += `<td style="${cellStyle}">${dev}${por}</td>`;
           });
           for(let i=0; i<missing; i++){
-            tbody += `<td style="${emptyStyle}">—</td>`;
+            tbody += `<td class="text-muted text-center" style="${cellStyle}">—</td>`;
           }
-          tbody += `<td style="${dimStyle}">${deviceLink(r.dest,'color:var(--tblr-secondary);')}</td>`;
-          tbody += `<td style="${dimStyle}">${portLink(r.dest,'color:var(--tblr-body-color);')}</td>`;
+          tbody += `<td class="text-muted" style="${dimStyle}">${deviceLink(r.dest,'color:var(--tblr-secondary);')}</td>`;
+          tbody += `<td class="text-muted" style="${dimStyle}">${portLink(r.dest,'color:var(--tblr-body-color);')}</td>`;
           tbody += '</tr>';
         });
         document.getElementById('trace-tbody').innerHTML = tbody;
