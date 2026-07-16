@@ -147,7 +147,7 @@
       .attr('class','topo-node')
       .style('cursor','pointer')
       .call(d3.drag()
-        .on('start',(e,d)=>{ if(!e.active)simulation.alphaTarget(0.3).restart(); d.fx=d.x;d.fy=d.y; })
+        .on('start',(e,d)=>{ simulation.alphaDecay(NORMAL_DECAY); if(!e.active)simulation.alphaTarget(0.3).restart(); d.fx=d.x;d.fy=d.y; })
         .on('drag', (e,d)=>{ d.fx=e.x; d.fy=e.y; })
         .on('end',  (e,d)=>{ if(!e.active)simulation.alphaTarget(0); d.fx=null;d.fy=null; }))
       .on('click', (_,d)=>selectDevice(d.pk));
@@ -206,7 +206,10 @@
     const defaultDistance  = nodeCount > 100 ? 250  : nodeCount > 50 ? 180  : nodeCount > 20 ? 140  : 110;
     document.getElementById('slider-repulsion').value = Math.abs(defaultRepulsion);
 
+    let stabilized = false, tickCount = 0;
+    const FAST_DECAY = 0.07, NORMAL_DECAY = 0.0228;
     simulation = d3.forceSimulation(nodesData)
+      .alphaDecay(FAST_DECAY)
       .force('link', d3.forceLink(linksData).id(d=>d.id).distance(defaultDistance).strength(0.7))
       .force('charge', d3.forceManyBody().strength(-Math.abs(defaultRepulsion)).distanceMax(600))
       .force('center', d3.forceCenter(W/2, H/2).strength(0.08))
@@ -214,6 +217,13 @@
       .force('x', d3.forceX(W/2).strength(0.02))
       .force('y', d3.forceY(H/2).strength(0.02))
       .on('tick', ()=>{
+        tickCount++;
+        if(tickCount === 10) fitView(false);
+        if(!stabilized && simulation.alpha() < 0.05){
+          stabilized = true;
+          simulation.alphaDecay(NORMAL_DECAY);
+          fitView(true);
+        }
         const r = 13;
         linkEl.each(function(d){
           const dx=d.target.x-d.source.x, dy=d.target.y-d.source.y, dist=Math.sqrt(dx*dx+dy*dy)||1;
@@ -357,19 +367,21 @@
       panel.innerHTML=html;
     }
 
-    window._topoSelect = selectDevice;
-    // Reset: background click or Escape (see above)
-    document.getElementById('btn-fit').onclick=()=>{
+    function fitView(animate){
       if(!nodesData || nodesData.length===0) return;
-      // Compute actual bounding box of nodes
       let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
       nodesData.forEach(d=>{ x0=Math.min(x0,d.x);y0=Math.min(y0,d.y);x1=Math.max(x1,d.x);y1=Math.max(y1,d.y); });
       const pad=60, gw=x1-x0+pad*2, gh=y1-y0+pad*2;
       const scale=Math.min(0.95, Math.min(W/gw, H/gh));
       const tx=W/2 - scale*(x0+x1)/2;
       const ty=H/2 - scale*(y0+y1)/2;
-      svg.transition().duration(500).call(zoomBehavior.transform, d3.zoomIdentity.translate(tx,ty).scale(scale));
-    };
+      const t = d3.zoomIdentity.translate(tx,ty).scale(scale);
+      if(animate) svg.transition().duration(500).call(zoomBehavior.transform, t);
+      else svg.call(zoomBehavior.transform, t);
+    }
+
+    window._topoSelect = selectDevice;
+    document.getElementById('btn-fit').onclick = ()=>fitView(true);
     document.getElementById('btn-zin').onclick=()=>svg.transition().duration(200).call(zoomBehavior.scaleBy, 1.3);
     document.getElementById('btn-zout').onclick=()=>svg.transition().duration(200).call(zoomBehavior.scaleBy, 0.77);
 
