@@ -125,6 +125,13 @@
       color: e.color || '',
     })).filter(l=>l.source&&l.target);
 
+    const neighborMap = new Map();
+    nodesData.forEach(n => neighborMap.set(n, []));
+    linksData.forEach(l => {
+      neighborMap.get(l.source).push(l.target);
+      neighborMap.get(l.target).push(l.source);
+    });
+
     // Strict SVG render order: links first, nodes next, labels on top
     // D3 best practice: no reordered intermediate groups, everything directly in gRoot
     const DEFAULT_CABLE_COLOR = '#94a3b8';
@@ -227,11 +234,11 @@
 
         // Label offset: opposite to neighbour centroid
         labelEl.attr('transform',d=>{
-          const nb = linksData.filter(l=>l.source===d||l.target===d);
+          const neighbors = neighborMap.get(d);
           let ox=0, oy=-(13+5+d._lines*14); // default: above
-          if(nb.length>0){
+          if(neighbors && neighbors.length>0){
             let cx=0,cy=0;
-            nb.forEach(l=>{ const o=l.source===d?l.target:l.source; cx+=o.x-d.x; cy+=o.y-d.y; });
+            neighbors.forEach(o=>{ cx+=o.x-d.x; cy+=o.y-d.y; });
             const len=Math.sqrt(cx*cx+cy*cy)||1;
             const ux=-cx/len, uy=-cy/len; // opposite direction
             const r=18;
