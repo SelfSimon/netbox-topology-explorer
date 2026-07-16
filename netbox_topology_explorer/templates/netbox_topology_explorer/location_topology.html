@@ -80,15 +80,6 @@
 
     const svg = d3.select(svgEl);
 
-    // Glow filter for cable highlight
-    const defs = svg.append('defs');
-    const filter = defs.append('filter').attr('id','glow').attr('x','-50%').attr('y','-50%').attr('width','200%').attr('height','200%');
-    filter.append('feGaussianBlur').attr('stdDeviation','3').attr('result','blur');
-    const merge = filter.append('feMerge');
-    merge.append('feMergeNode').attr('in','blur');
-    merge.append('feMergeNode').attr('in','blur');
-    merge.append('feMergeNode').attr('in','SourceGraphic');
-
     const gRoot = svg.append('g');
 
     zoomBehavior = d3.zoom().scaleExtent([0.15,5]).on('zoom', e=>gRoot.attr('transform',e.transform));
@@ -224,11 +215,13 @@
       .force('y', d3.forceY(H/2).strength(0.02))
       .on('tick', ()=>{
         const r = 13;
-        linkEl
-          .attr('x1',d=>{ const dx=d.target.x-d.source.x,dy=d.target.y-d.source.y,dist=Math.sqrt(dx*dx+dy*dy)||1; return d.source.x+dx/dist*r; })
-          .attr('y1',d=>{ const dx=d.target.x-d.source.x,dy=d.target.y-d.source.y,dist=Math.sqrt(dx*dx+dy*dy)||1; return d.source.y+dy/dist*r; })
-          .attr('x2',d=>{ const dx=d.source.x-d.target.x,dy=d.source.y-d.target.y,dist=Math.sqrt(dx*dx+dy*dy)||1; return d.target.x+dx/dist*r; })
-          .attr('y2',d=>{ const dx=d.source.x-d.target.x,dy=d.source.y-d.target.y,dist=Math.sqrt(dx*dx+dy*dy)||1; return d.target.y+dy/dist*r; });
+        linkEl.each(function(d){
+          const dx=d.target.x-d.source.x, dy=d.target.y-d.source.y, dist=Math.sqrt(dx*dx+dy*dy)||1;
+          const ox=dx/dist*r, oy=dy/dist*r;
+          const el=d3.select(this);
+          el.attr('x1',d.source.x+ox).attr('y1',d.source.y+oy)
+            .attr('x2',d.target.x-ox).attr('y2',d.target.y-oy);
+        });
 
         nodeEl.attr('transform',d=>`translate(${d.x},${d.y})`);
 
@@ -325,7 +318,7 @@
         .attr('stroke', d=>(inv.has(d.source.pk)&&inv.has(d.target.pk)) ? (d.color||DEFAULT_CABLE_COLOR) : '#e2e8f0')
         .attr('stroke-width', d=>(inv.has(d.source.pk)&&inv.has(d.target.pk)) ? 3 : 1)
         .attr('opacity', d=>(inv.has(d.source.pk)&&inv.has(d.target.pk)) ? 1 : 0.12)
-        .attr('filter', d=>(inv.has(d.source.pk)&&inv.has(d.target.pk)) ? 'url(#glow)' : null);
+        .style('filter', d=>(inv.has(d.source.pk)&&inv.has(d.target.pk)) ? 'drop-shadow(0 0 3px currentColor)' : null);
 
       const nd = nodesData.find(d=>d.pk===pk);
       const titleLink = nd && nd.url

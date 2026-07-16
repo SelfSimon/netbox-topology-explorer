@@ -38,10 +38,10 @@ def location_topology_data(request, pk):
 
 
 def _all_tenant_pks_in_group(group):
-    pks = list(group.tenants.values_list("pk", flat=True))
-    for child in group.children.all():
-        pks.extend(_all_tenant_pks_in_group(child))
-    return pks
+    descendant_groups = group.get_descendants(include_self=True)
+    return list(
+        Tenant.objects.filter(group__in=descendant_groups).values_list("pk", flat=True)
+    )
 
 
 @register_model_view(Tenant, "topology", path="topology")
