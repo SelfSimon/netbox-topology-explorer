@@ -17,7 +17,8 @@
                     style="width:90px; cursor:pointer; accent-color:var(--tblr-primary,#2f6fed);">
                 </div>
               </div>
-              <div style="position:absolute; top:10px; right:10px; z-index:10;">
+              <div style="position:absolute; top:10px; right:10px; z-index:10; display:flex; gap:6px;">
+                <button id="btn-fullscreen" style="background:var(--tblr-card-bg,#fff); border:1px solid var(--tblr-border-color); border-radius:6px; padding:4px 10px; font-size:12px; cursor:pointer; color:var(--tblr-body-color);">&#x26F6; Fullscreen</button>
                 <button id="btn-table" class="btn btn-primary btn-sm">&#9776; Trace table</button>
               </div>
               <!-- Trace modal -->
@@ -51,6 +52,15 @@
 </div>
 
 {% if device_count > 0 %}
+<style>
+  #topo-row.topo-fullscreen {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 1050;
+    height: 100vh !important;
+    background: var(--tblr-card-bg, #fff);
+  }
+</style>
 <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
 <script>
 (function(){
@@ -64,12 +74,26 @@
   // Stretch the graph row to fill the rest of the browser tab below it,
   // whatever NetBox chrome (header/tabs/breadcrumb) sits above the card.
   const topoRow = document.getElementById('topo-row');
+  let isFullscreen = false;
   function resizeTopoRow(){
+    if(isFullscreen) return;
     const top = topoRow.getBoundingClientRect().top;
     topoRow.style.height = Math.max(400, window.innerHeight - top - 16) + 'px';
   }
   resizeTopoRow();
   window.addEventListener('resize', resizeTopoRow);
+
+  // In-page fullscreen: overlays the graph + trace panel over the whole
+  // browser window (not the native Fullscreen API), so it stays inside
+  // NetBox's chrome-free viewport rather than taking over the whole screen.
+  function setFullscreen(on){
+    isFullscreen = on;
+    topoRow.classList.toggle('topo-fullscreen', on);
+    document.body.style.overflow = on ? 'hidden' : '';
+    document.getElementById('btn-fullscreen').innerHTML = on ? '&#x2716; Exit fullscreen' : '&#x26F6; Fullscreen';
+    resizeTopoRow();
+  }
+  document.getElementById('btn-fullscreen').onclick = ()=> setFullscreen(!isFullscreen);
 
   function esc(s){ return s==null?'':String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
@@ -189,9 +213,11 @@
     svg.on('click', function(e){
       if(e.target === svgEl) selectDevice(null);
     });
-    // Escape → reset
+    // Escape → exit fullscreen first if active, otherwise reset selection
     document.addEventListener('keydown', function(e){
-      if(e.key === 'Escape') selectDevice(null);
+      if(e.key !== 'Escape') return;
+      if(isFullscreen) setFullscreen(false);
+      else selectDevice(null);
     });
     // Re-apply cable colours if the user flips the light/dark theme toggle
     // without reloading, so the highlight stays theme-correct.
