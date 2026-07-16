@@ -78,3 +78,5 @@ __pypackages__/
 # Editors / tooling
 .ropeproject/
 .ipynb_checkpoints/
+.playwright-mcp/
+.mcp.json

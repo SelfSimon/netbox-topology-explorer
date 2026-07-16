@@ -41,12 +41,16 @@ def _obj_info(obj):
             device_url = device.get_absolute_url()
         except Exception:
             pass
+    role_obj = getattr(device, "role", None) if device else None
+    role_color = getattr(role_obj, "color", "") or "" if role_obj else ""
     info = {
         "name": getattr(obj, "name", None) or str(obj),
         "model": model,
         "device": device.name if device else None,
         "device_pk": device.pk if device else None,
         "device_url": device_url,
+        "device_role": role_obj.name if role_obj else "",
+        "device_role_color": "#" + role_color if role_color else "",
         "color": "#" + raw_color if raw_color else "",
         "url": None,
     }
@@ -271,6 +275,8 @@ def _build_topology_from_scan(scan_results, location_pks):
                 el.get("device"),
                 el.get("device_url"),
                 external=(dpk not in location_pks),
+                role=el.get("device_role", ""),
+                color=el.get("device_role_color", ""),
             )
             if not device_seq or device_seq[-1] != dpk:
                 device_seq.append(dpk)
