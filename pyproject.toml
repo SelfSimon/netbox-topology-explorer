@@ -36,7 +36,7 @@ Repository = "https://github.com/SelfSimon/netbox-topology-explorer"
 include = ["netbox_topology_explorer*"]
 
 [tool.setuptools.package-data]
-netbox_topology_explorer = ["templates/**/*"]
+netbox_topology_explorer = ["templates/**/*", "locale/**/*"]
 
 [project.optional-dependencies]
 dev = [

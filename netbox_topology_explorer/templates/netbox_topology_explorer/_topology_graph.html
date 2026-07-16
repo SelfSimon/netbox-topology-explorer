@@ -1,3 +1,29 @@
+{% load i18n %}
+{% trans "Center" as TXT_CENTER %}
+{% trans "Spacing" as TXT_SPACING %}
+{% trans "Trace table" as TXT_TRACE_TABLE %}
+{% trans "Fullscreen" as TXT_FULLSCREEN %}
+{% trans "Exit fullscreen" as TXT_EXIT_FULLSCREEN %}
+{% trans "Cable traces — all devices" as TXT_CABLE_TRACES_TITLE %}
+{% trans "CSV" as TXT_CSV %}
+{% trans "Click on a device." as TXT_CLICK_DEVICE %}
+{% trans "Front" as TXT_FRONT %}
+{% trans "Rear" as TXT_REAR %}
+{% trans "Cable" as TXT_CABLE %}
+{% trans "Error:" as TXT_ERROR %}
+{% trans "Scroll to zoom · Drag background to pan · Escape to deselect" as TXT_HINT %}
+{% trans "Unknown" as TXT_UNKNOWN %}
+{% trans "External" as TXT_EXTERNAL %}
+{% trans "No cabled path." as TXT_NO_CABLED_PATH %}
+{% trans "path" as TXT_PATH_SINGULAR %}
+{% trans "paths" as TXT_PATH_PLURAL %}
+{% trans "Path" as TXT_PATH_LABEL %}
+{% trans "Open full trace" as TXT_OPEN_FULL_TRACE %}
+{% trans "Source device" as TXT_SOURCE_DEVICE %}
+{% trans "Source port" as TXT_SOURCE_PORT %}
+{% trans "Step" as TXT_STEP %}
+{% trans "Destination device" as TXT_DEST_DEVICE %}
+{% trans "Destination port" as TXT_DEST_PORT %}
 <div class="row">
   <div class="col col-md-12">
     <div class="card">
@@ -8,26 +34,26 @@
           <div id="topo-row" style="display:flex; height:640px; overflow:hidden;">
             <div id="topo-wrap" style="flex:1 1 auto; position:relative; min-width:0;">
               <div style="position:absolute; top:10px; left:10px; z-index:10; display:flex; gap:6px;">
-                <button id="btn-fit"        style="background:var(--tblr-card-bg,#fff); border:1px solid var(--tblr-border-color); border-radius:6px; padding:4px 10px; font-size:12px; cursor:pointer; color:var(--tblr-body-color);">&#x2922; Center</button>
+                <button id="btn-fit"        style="background:var(--tblr-card-bg,#fff); border:1px solid var(--tblr-border-color); border-radius:6px; padding:4px 10px; font-size:12px; cursor:pointer; color:var(--tblr-body-color);">&#x2922; {{ TXT_CENTER }}</button>
                 <button id="btn-zin"        style="background:var(--tblr-card-bg,#fff); border:1px solid var(--tblr-border-color); border-radius:6px; padding:4px 10px; font-size:14px; cursor:pointer; color:var(--tblr-body-color); font-weight:600;">+</button>
                 <button id="btn-zout"       style="background:var(--tblr-card-bg,#fff); border:1px solid var(--tblr-border-color); border-radius:6px; padding:4px 10px; font-size:14px; cursor:pointer; color:var(--tblr-body-color); font-weight:600;">−</button>
                 <div style="display:flex; align-items:center; gap:5px; background:var(--tblr-card-bg,#fff); border:1px solid var(--tblr-border-color); border-radius:6px; padding:4px 10px;">
-                  <span style="font-size:11px; color:var(--tblr-body-color); white-space:nowrap;">Spacing</span>
+                  <span style="font-size:11px; color:var(--tblr-body-color); white-space:nowrap;">{{ TXT_SPACING }}</span>
                   <input id="slider-repulsion" type="range" min="50" max="3000" value="350" step="50"
                     style="width:90px; cursor:pointer; accent-color:var(--tblr-primary,#2f6fed);">
                 </div>
               </div>
               <div style="position:absolute; top:10px; right:10px; z-index:10; display:flex; gap:6px;">
-                <button id="btn-fullscreen" style="background:var(--tblr-card-bg,#fff); border:1px solid var(--tblr-border-color); border-radius:6px; padding:4px 10px; font-size:12px; cursor:pointer; color:var(--tblr-body-color);">&#x26F6; Fullscreen</button>
-                <button id="btn-table" class="btn btn-primary btn-sm">&#9776; Trace table</button>
+                <button id="btn-fullscreen" style="background:var(--tblr-card-bg,#fff); border:1px solid var(--tblr-border-color); border-radius:6px; padding:4px 10px; font-size:12px; cursor:pointer; color:var(--tblr-body-color);">&#x26F6; {{ TXT_FULLSCREEN }}</button>
+                <button id="btn-table" class="btn btn-primary btn-sm">&#9776; {{ TXT_TRACE_TABLE }}</button>
               </div>
               <!-- Trace modal -->
               <div id="trace-modal" style="display:none; position:absolute; inset:0; z-index:100; background:rgba(0,0,0,0.45); overflow:auto; padding:20px;">
                 <div style="background:var(--tblr-card-bg,#fff); border-radius:8px; padding:20px; max-width:1100px; margin:0 auto; position:relative;">
                   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
-                    <strong style="font-size:15px;">Cable traces — all devices</strong>
+                    <strong style="font-size:15px;">{{ TXT_CABLE_TRACES_TITLE }}</strong>
                     <div style="display:flex; gap:8px; align-items:center;">
-                      <button id="btn-export-csv" style="background:var(--tblr-card-bg,#fff); border:1px solid var(--tblr-border-color); border-radius:6px; padding:3px 10px; font-size:12px; cursor:pointer; color:var(--tblr-body-color);">⬇ CSV</button>
+                      <button id="btn-export-csv" style="background:var(--tblr-card-bg,#fff); border:1px solid var(--tblr-border-color); border-radius:6px; padding:3px 10px; font-size:12px; cursor:pointer; color:var(--tblr-body-color);">⬇ {{ TXT_CSV }}</button>
                       <button id="btn-close-modal" style="background:none; border:none; font-size:20px; cursor:pointer; color:var(--tblr-body-color); line-height:1;">×</button>
                     </div>
                   </div>
@@ -42,7 +68,7 @@
               <svg id="topo-svg" style="width:100%;height:100%;"></svg>
             </div>
             <div id="trace-panel" style="width:360px;flex-shrink:0;border-left:1px solid var(--tblr-border-color);overflow-y:auto;padding:14px;font-size:13px;">
-              <p style="color:var(--tblr-secondary);margin:0;">Click on a device.</p>
+              <p style="color:var(--tblr-secondary);margin:0;">{{ TXT_CLICK_DEVICE }}</p>
             </div>
           </div>
         {% endif %}
@@ -65,7 +91,27 @@
 <script>
 (function(){
   const DATA_URL = "{{ data_url }}";
-  const SCOPE_LABEL = "{{ scope_label|default:'location' }}";
+  const IN_SCOPE_LABEL = "{{ in_scope_label|escapejs }}";
+  const TXT_FULLSCREEN = "{{ TXT_FULLSCREEN|escapejs }}";
+  const TXT_EXIT_FULLSCREEN = "{{ TXT_EXIT_FULLSCREEN|escapejs }}";
+  const TXT_CLICK_DEVICE = "{{ TXT_CLICK_DEVICE|escapejs }}";
+  const TXT_FRONT = "{{ TXT_FRONT|escapejs }}";
+  const TXT_REAR = "{{ TXT_REAR|escapejs }}";
+  const TXT_CABLE = "{{ TXT_CABLE|escapejs }}";
+  const TXT_ERROR = "{{ TXT_ERROR|escapejs }}";
+  const TXT_HINT = "{{ TXT_HINT|escapejs }}";
+  const TXT_UNKNOWN = "{{ TXT_UNKNOWN|escapejs }}";
+  const TXT_EXTERNAL = "{{ TXT_EXTERNAL|escapejs }}";
+  const TXT_NO_CABLED_PATH = "{{ TXT_NO_CABLED_PATH|escapejs }}";
+  const TXT_PATH_SINGULAR = "{{ TXT_PATH_SINGULAR|escapejs }}";
+  const TXT_PATH_PLURAL = "{{ TXT_PATH_PLURAL|escapejs }}";
+  const TXT_PATH_LABEL = "{{ TXT_PATH_LABEL|escapejs }}";
+  const TXT_OPEN_FULL_TRACE = "{{ TXT_OPEN_FULL_TRACE|escapejs }}";
+  const TXT_SOURCE_DEVICE = "{{ TXT_SOURCE_DEVICE|escapejs }}";
+  const TXT_SOURCE_PORT = "{{ TXT_SOURCE_PORT|escapejs }}";
+  const TXT_STEP = "{{ TXT_STEP|escapejs }}";
+  const TXT_DEST_DEVICE = "{{ TXT_DEST_DEVICE|escapejs }}";
+  const TXT_DEST_PORT = "{{ TXT_DEST_PORT|escapejs }}";
   const panel = document.getElementById('trace-panel');
   let allPaths = [], simulation, zoomBehavior;
   let gLinks, gNodes, gLabels;
@@ -90,7 +136,7 @@
     isFullscreen = on;
     topoRow.classList.toggle('topo-fullscreen', on);
     document.body.style.overflow = on ? 'hidden' : '';
-    document.getElementById('btn-fullscreen').innerHTML = on ? '&#x2716; Exit fullscreen' : '&#x26F6; Fullscreen';
+    document.getElementById('btn-fullscreen').innerHTML = on ? '&#x2716; '+TXT_EXIT_FULLSCREEN : '&#x26F6; '+TXT_FULLSCREEN;
     resizeTopoRow();
   }
   document.getElementById('btn-fullscreen').onclick = ()=> setFullscreen(!isFullscreen);
@@ -111,7 +157,7 @@
   // compact trace blocks) pass their own contrast colour instead of the
   // tblr theme vars, which are only tuned for the neutral panel background.
   function portKindTag(model, fg){
-    const label = model==='frontport' ? 'Front' : model==='rearport' ? 'Rear' : '';
+    const label = model==='frontport' ? TXT_FRONT : model==='rearport' ? TXT_REAR : '';
     if(!label) return '';
     const color = fg || 'var(--tblr-secondary)';
     const borderColor = fg ? (fg==='#111' ? 'rgba(0,0,0,.4)' : 'rgba(255,255,255,.5)') : 'var(--tblr-border-color)';
@@ -167,7 +213,7 @@
         html += `</div></div>`;
       } else {
         const color = b.color || '#94a3b8';
-        const label = 'Cable ' + (b.name||'');
+        const label = TXT_CABLE + ' ' + (b.name||'');
         const labelHtml = b.url
           ? `<a href="${esc(b.url)}" style="font-size:11px;color:var(--tblr-secondary);text-decoration:none;">${esc(label)}</a>`
           : `<span style="font-size:11px;color:var(--tblr-secondary);">${esc(label)}</span>`;
@@ -185,7 +231,7 @@
 
   fetch(DATA_URL, {headers:{'X-Requested-With':'XMLHttpRequest'}})
     .then(r=>r.json()).then(build)
-    .catch(e=>{ document.getElementById('topo-wrap').innerHTML='<p style="color:red;padding:12px">Error: '+esc(String(e))+'</p>'; });
+    .catch(e=>{ document.getElementById('topo-wrap').innerHTML='<p style="color:red;padding:12px">'+esc(TXT_ERROR)+' '+esc(String(e))+'</p>'; });
 
   function build(data){
     allPaths = data.paths || [];
@@ -207,7 +253,7 @@
       .attr('x', W-10).attr('y', H-10)
       .attr('text-anchor','end').attr('font-size','10px')
       .attr('fill','#94a3b8').attr('pointer-events','none')
-      .text('Scroll to zoom · Drag background to pan · Escape to deselect');
+      .text(TXT_HINT);
 
     // Click on SVG background (not on a node) → reset
     svg.on('click', function(e){
@@ -395,7 +441,7 @@
       const seen = new Map();
       nodesData.forEach(d=>{
         if(d.role && d.color && !seen.has(d.color)) seen.set(d.color, d.role);
-        else if(!d.role || !d.color) seen.set('#94a3b8', 'Unknown');
+        else if(!d.role || !d.color) seen.set('#94a3b8', TXT_UNKNOWN);
       });
       const LEGEND = Array.from(seen, ([color, label]) => ({color, label}))
         .sort((a,b)=>a.label.localeCompare(b.label));
@@ -423,12 +469,12 @@
       gLocal.append('rect').attr('x',-5).attr('y',-5).attr('width',10).attr('height',10)
         .attr('rx',2).attr('fill','#6b7280').attr('stroke','#333').attr('stroke-width',0.5);
       gLocal.append('text').attr('x',12).attr('y',4)
-        .attr('font-size','10px').attr('fill','var(--tblr-body-color,#1d273b)').text('In this '+SCOPE_LABEL);
+        .attr('font-size','10px').attr('fill','var(--tblr-body-color,#1d273b)').text(IN_SCOPE_LABEL);
 
       const gExt = leg.append('g').attr('transform',`translate(0,${shapeY+16})`);
       gExt.append('circle').attr('r',5).attr('fill','#6b7280').attr('stroke','#333').attr('stroke-width',0.5);
       gExt.append('text').attr('x',12).attr('y',4)
-        .attr('font-size','10px').attr('fill','var(--tblr-body-color,#1d273b)').text('External');
+        .attr('font-size','10px').attr('fill','var(--tblr-body-color,#1d273b)').text(TXT_EXTERNAL);
     }
 
     // Highlight
@@ -446,7 +492,7 @@
       });
         resetLinks();
         labelEl.attr('opacity',1);
-        panel.innerHTML='<p style="color:var(--tblr-secondary);margin:0;">Click on a device.</p>';
+        panel.innerHTML='<p style="color:var(--tblr-secondary);margin:0;">'+esc(TXT_CLICK_DEVICE)+'</p>';
         return;
       }
       const matching = allPaths.filter(p=>(p.device_pks||[]).includes(pk));
@@ -481,17 +527,18 @@
         : `<div style="font-weight:600;font-size:14px;margin-bottom:8px;">${esc(nd?nd.label:'')}</div>`;
       let html = titleLink;
       if(!matching.length){
-        html+=`<p style="color:var(--tblr-secondary);font-size:12px;">No cabled path.</p>`;
+        html+=`<p style="color:var(--tblr-secondary);font-size:12px;">${esc(TXT_NO_CABLED_PATH)}</p>`;
       } else {
-        html+=`<div style="color:var(--tblr-secondary);font-size:11px;margin-bottom:8px;">${matching.length} path(s)</div>`;
+        const pathWord = matching.length===1 ? TXT_PATH_SINGULAR : TXT_PATH_PLURAL;
+        html+=`<div style="color:var(--tblr-secondary);font-size:11px;margin-bottom:8px;">${matching.length} ${esc(pathWord)}</div>`;
         matching.forEach((path,i)=>{
           html+=`<div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--tblr-border-color);">`;
-          html+=`<div style="font-size:11px;font-weight:600;color:var(--tblr-secondary);margin-bottom:6px;">Path ${i+1}</div>`;
+          html+=`<div style="font-size:11px;font-weight:600;color:var(--tblr-secondary);margin-bottom:6px;">${esc(TXT_PATH_LABEL)} ${i+1}</div>`;
           html+=buildCompactTraceHtml(path, pk);
           const ports = (path.elements||[]).filter(el=>el.kind==='port' && el.url);
           if(ports.length){
             const traceHref = ports[0].url+'trace/';
-            html+=`<a href="${esc(traceHref)}" target="_blank" rel="noopener" style="display:inline-block;margin-top:6px;font-size:11px;color:var(--tblr-primary);text-decoration:none;">Open full trace ↗</a>`;
+            html+=`<a href="${esc(traceHref)}" target="_blank" rel="noopener" style="display:inline-block;margin-top:6px;font-size:11px;color:var(--tblr-primary);text-decoration:none;">${esc(TXT_OPEN_FULL_TRACE)} ↗</a>`;
           }
           html+=`</div>`;
         });
@@ -557,7 +604,7 @@
 
       // Thead with sorting
       const thStyle = 'border:1px solid var(--tblr-border-color); padding:6px 8px; background:var(--tblr-light,#f8f9fa); font-weight:600; white-space:nowrap; cursor:pointer; user-select:none;';
-      const colNames = ['Source device','Source port',...Array.from({length:maxNext},(_,i)=>`Step ${i+1}`),'Destination device','Destination port'];
+      const colNames = [TXT_SOURCE_DEVICE,TXT_SOURCE_PORT,...Array.from({length:maxNext},(_,i)=>`${TXT_STEP} ${i+1}`),TXT_DEST_DEVICE,TXT_DEST_PORT];
       let thead = '<tr>';
       colNames.forEach((name,i)=>{
         thead += `<th style="${thStyle}" onclick="window._topoSort(${i})">`;
