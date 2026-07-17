@@ -1,6 +1,7 @@
 from dcim.models import Device, Location
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
+from django.utils.translation import gettext_lazy as _
 from netbox.views import generic
 from tenancy.models import Tenant, TenantGroup
 from utilities.views import ViewTab, register_model_view
@@ -16,7 +17,7 @@ class LocationTopologyView(generic.ObjectView):
     template_name = "netbox_topology_explorer/location_topology.html"
 
     tab = ViewTab(
-        label="Topology",
+        label=_("Topology"),
         badge=lambda obj: Device.objects.filter(location=obj).count(),
         permission="dcim.view_device",
     )
@@ -24,6 +25,9 @@ class LocationTopologyView(generic.ObjectView):
     def get_extra_context(self, request, instance):
         return {
             "device_count": Device.objects.filter(location=instance).count(),
+            "data_url": f"/plugins/topology/locations/{instance.pk}/data/",
+            "empty_message": _("No devices in this location."),
+            "in_scope_label": _("In this location"),
         }
 
 
@@ -38,10 +42,10 @@ def location_topology_data(request, pk):
 
 
 def _all_tenant_pks_in_group(group):
-    pks = list(group.tenants.values_list("pk", flat=True))
-    for child in group.children.all():
-        pks.extend(_all_tenant_pks_in_group(child))
-    return pks
+    descendant_groups = group.get_descendants(include_self=True)
+    return list(
+        Tenant.objects.filter(group__in=descendant_groups).values_list("pk", flat=True)
+    )
 
 
 @register_model_view(Tenant, "topology", path="topology")
@@ -50,7 +54,7 @@ class TenantTopologyView(generic.ObjectView):
     template_name = "netbox_topology_explorer/tenant_topology.html"
 
     tab = ViewTab(
-        label="Topology",
+        label=_("Topology"),
         badge=lambda obj: Location.objects.filter(tenant=obj).count(),
         permission="dcim.view_device",
     )
@@ -59,7 +63,10 @@ class TenantTopologyView(generic.ObjectView):
         locations = Location.objects.filter(tenant=instance)
         return {
             "location_count": locations.count(),
+            "device_count": Device.objects.filter(location__in=locations).count(),
             "data_url": f"/plugins/topology/tenants/{instance.pk}/data/",
+            "empty_message": _("No devices found for this tenant."),
+            "in_scope_label": _("In this tenant"),
         }
 
 
@@ -80,7 +87,7 @@ class TenantGroupTopologyView(generic.ObjectView):
     template_name = "netbox_topology_explorer/tenant_topology.html"
 
     tab = ViewTab(
-        label="Topology",
+        label=_("Topology"),
         badge=lambda obj: Location.objects.filter(
             tenant__in=_all_tenant_pks_in_group(obj)
         ).count(),
@@ -92,7 +99,10 @@ class TenantGroupTopologyView(generic.ObjectView):
         locations = Location.objects.filter(tenant__in=tenant_pks)
         return {
             "location_count": locations.count(),
+            "device_count": Device.objects.filter(location__in=locations).count(),
             "data_url": f"/plugins/topology/tenant-groups/{instance.pk}/data/",
+            "empty_message": _("No devices found for this tenant group."),
+            "in_scope_label": _("In this tenant group"),
         }
 
 

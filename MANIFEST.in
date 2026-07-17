@@ -4,3 +4,4 @@ include CHANGELOG.md
 include CONTRIBUTING.md
 recursive-include netbox_topology_explorer/templates *
 recursive-include netbox_topology_explorer/static *
+recursive-include netbox_topology_explorer/locale *

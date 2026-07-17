@@ -1,0 +1,732 @@
+{% load i18n %}
+{% trans "Center" as TXT_CENTER %}
+{% trans "Spacing" as TXT_SPACING %}
+{% trans "Trace table" as TXT_TRACE_TABLE %}
+{% trans "Fullscreen" as TXT_FULLSCREEN %}
+{% trans "Exit fullscreen" as TXT_EXIT_FULLSCREEN %}
+{% trans "Cable traces — all devices" as TXT_CABLE_TRACES_TITLE %}
+{% trans "CSV" as TXT_CSV %}
+{% trans "Click on a device." as TXT_CLICK_DEVICE %}
+{% trans "Front" as TXT_FRONT %}
+{% trans "Rear" as TXT_REAR %}
+{% trans "Cable" as TXT_CABLE %}
+{% trans "Error:" as TXT_ERROR %}
+{% trans "Scroll to zoom · Drag background to pan · Escape to deselect" as TXT_HINT %}
+{% trans "Unknown" as TXT_UNKNOWN %}
+{% trans "External" as TXT_EXTERNAL %}
+{% trans "No cabled path." as TXT_NO_CABLED_PATH %}
+{% trans "path" as TXT_PATH_SINGULAR %}
+{% trans "paths" as TXT_PATH_PLURAL %}
+{% trans "Path" as TXT_PATH_LABEL %}
+{% trans "Open full trace" as TXT_OPEN_FULL_TRACE %}
+{% trans "Source device" as TXT_SOURCE_DEVICE %}
+{% trans "Source port" as TXT_SOURCE_PORT %}
+{% trans "Step" as TXT_STEP %}
+{% trans "Destination device" as TXT_DEST_DEVICE %}
+{% trans "Destination port" as TXT_DEST_PORT %}
+<div class="row">
+  <div class="col col-md-12">
+    <div class="card">
+      <div class="card-body p-0">
+        {% if device_count == 0 %}
+          <p class="text-muted p-3">{{ empty_message }}</p>
+        {% else %}
+          <div id="topo-row" style="display:flex; height:640px; overflow:hidden;">
+            <div id="topo-wrap" style="flex:1 1 auto; position:relative; min-width:0;">
+              <div style="position:absolute; top:10px; left:10px; z-index:10; display:flex; gap:6px;">
+                <button id="btn-fit"        style="background:var(--tblr-card-bg,#fff); border:1px solid var(--tblr-border-color); border-radius:6px; padding:4px 10px; font-size:12px; cursor:pointer; color:var(--tblr-body-color);">&#x2922; {{ TXT_CENTER }}</button>
+                <button id="btn-zin"        style="background:var(--tblr-card-bg,#fff); border:1px solid var(--tblr-border-color); border-radius:6px; padding:4px 10px; font-size:14px; cursor:pointer; color:var(--tblr-body-color); font-weight:600;">+</button>
+                <button id="btn-zout"       style="background:var(--tblr-card-bg,#fff); border:1px solid var(--tblr-border-color); border-radius:6px; padding:4px 10px; font-size:14px; cursor:pointer; color:var(--tblr-body-color); font-weight:600;">−</button>
+                <div style="display:flex; align-items:center; gap:5px; background:var(--tblr-card-bg,#fff); border:1px solid var(--tblr-border-color); border-radius:6px; padding:4px 10px;">
+                  <span style="font-size:11px; color:var(--tblr-body-color); white-space:nowrap;">{{ TXT_SPACING }}</span>
+                  <input id="slider-repulsion" type="range" min="50" max="3000" value="350" step="50"
+                    style="width:90px; cursor:pointer; accent-color:var(--tblr-primary,#2f6fed);">
+                </div>
+              </div>
+              <div style="position:absolute; top:10px; right:10px; z-index:10; display:flex; gap:6px;">
+                <button id="btn-fullscreen" style="background:var(--tblr-card-bg,#fff); border:1px solid var(--tblr-border-color); border-radius:6px; padding:4px 10px; font-size:12px; cursor:pointer; color:var(--tblr-body-color);">&#x26F6; {{ TXT_FULLSCREEN }}</button>
+                <button id="btn-table" class="btn btn-primary btn-sm">&#9776; {{ TXT_TRACE_TABLE }}</button>
+              </div>
+              <svg id="topo-svg" style="width:100%;height:100%;"></svg>
+            </div>
+            <div id="trace-panel" style="width:360px;flex-shrink:0;border-left:1px solid var(--tblr-border-color);overflow-y:auto;padding:14px;font-size:13px;">
+              <p style="color:var(--tblr-secondary);margin:0;">{{ TXT_CLICK_DEVICE }}</p>
+            </div>
+            <!-- Trace modal: sibling of topo-wrap/trace-panel (not nested inside
+                 either) so it overlays the full row -- graph AND trace panel --
+                 rather than just the graph canvas. -->
+            <div id="trace-modal" style="display:none; position:absolute; inset:0; z-index:100; background:rgba(0,0,0,0.45); overflow:auto; padding:20px;">
+              <div class="card" style="max-width:1100px; margin:0 auto;">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                  <strong>{{ TXT_CABLE_TRACES_TITLE }}</strong>
+                  <div class="d-flex gap-2 align-items-center">
+                    <button id="btn-export-csv" class="btn btn-outline-secondary btn-sm">⬇ {{ TXT_CSV }}</button>
+                    <button id="btn-close-modal" type="button" class="btn-close" aria-label="Close"></button>
+                  </div>
+                </div>
+                <div class="card-body p-0">
+                  <div class="table-responsive">
+                    <table id="trace-table" class="table table-hover table-sm object-list" style="font-size:12px;">
+                      <thead id="trace-thead"></thead>
+                      <tbody id="trace-tbody"></tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if device_count > 0 %}
+<style>
+  /* Positioning context for #trace-modal, set here (not inline) so it stays
+     lower-specificity than the .topo-fullscreen rule below and doesn't
+     block the switch to `position: fixed` when fullscreen is toggled. */
+  #topo-row {
+    position: relative;
+  }
+  #topo-row.topo-fullscreen {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 1050;
+    height: 100vh !important;
+    /* background is set inline by setFullscreen(), matched to the real
+       .card background color, since --tblr-card-bg resolves to a different
+       (lighter) shade than what NetBox actually paints behind the card. */
+  }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script>
+(function(){
+  const DATA_URL = "{{ data_url }}";
+  const IN_SCOPE_LABEL = "{{ in_scope_label|escapejs }}";
+  const TXT_FULLSCREEN = "{{ TXT_FULLSCREEN|escapejs }}";
+  const TXT_EXIT_FULLSCREEN = "{{ TXT_EXIT_FULLSCREEN|escapejs }}";
+  const TXT_CLICK_DEVICE = "{{ TXT_CLICK_DEVICE|escapejs }}";
+  const TXT_FRONT = "{{ TXT_FRONT|escapejs }}";
+  const TXT_REAR = "{{ TXT_REAR|escapejs }}";
+  const TXT_CABLE = "{{ TXT_CABLE|escapejs }}";
+  const TXT_ERROR = "{{ TXT_ERROR|escapejs }}";
+  const TXT_HINT = "{{ TXT_HINT|escapejs }}";
+  const TXT_UNKNOWN = "{{ TXT_UNKNOWN|escapejs }}";
+  const TXT_EXTERNAL = "{{ TXT_EXTERNAL|escapejs }}";
+  const TXT_NO_CABLED_PATH = "{{ TXT_NO_CABLED_PATH|escapejs }}";
+  const TXT_PATH_SINGULAR = "{{ TXT_PATH_SINGULAR|escapejs }}";
+  const TXT_PATH_PLURAL = "{{ TXT_PATH_PLURAL|escapejs }}";
+  const TXT_PATH_LABEL = "{{ TXT_PATH_LABEL|escapejs }}";
+  const TXT_OPEN_FULL_TRACE = "{{ TXT_OPEN_FULL_TRACE|escapejs }}";
+  const TXT_SOURCE_DEVICE = "{{ TXT_SOURCE_DEVICE|escapejs }}";
+  const TXT_SOURCE_PORT = "{{ TXT_SOURCE_PORT|escapejs }}";
+  const TXT_STEP = "{{ TXT_STEP|escapejs }}";
+  const TXT_DEST_DEVICE = "{{ TXT_DEST_DEVICE|escapejs }}";
+  const TXT_DEST_PORT = "{{ TXT_DEST_PORT|escapejs }}";
+  const panel = document.getElementById('trace-panel');
+  let allPaths = [], simulation, zoomBehavior;
+  let gLinks, gNodes, gLabels;
+  let nodesData, linksData;
+
+  // Stretch the graph row to fill the rest of the browser tab below it,
+  // whatever NetBox chrome (header/tabs/breadcrumb) sits above the card.
+  const topoRow = document.getElementById('topo-row');
+  let isFullscreen = false;
+  function resizeTopoRow(){
+    if(isFullscreen) return;
+    const top = topoRow.getBoundingClientRect().top;
+    topoRow.style.height = Math.max(400, window.innerHeight - top - 16) + 'px';
+  }
+  resizeTopoRow();
+  window.addEventListener('resize', resizeTopoRow);
+
+  // In-page fullscreen: overlays the graph + trace panel over the whole
+  // browser window (not the native Fullscreen API), so it stays inside
+  // NetBox's chrome-free viewport rather than taking over the whole screen.
+  function setFullscreen(on){
+    isFullscreen = on;
+    topoRow.classList.toggle('topo-fullscreen', on);
+    if(on){
+      const card = topoRow.closest('.card');
+      topoRow.style.background = card ? getComputedStyle(card).backgroundColor : '';
+    } else {
+      topoRow.style.background = '';
+    }
+    document.body.style.overflow = on ? 'hidden' : '';
+    document.getElementById('btn-fullscreen').innerHTML = on ? '&#x2716; '+TXT_EXIT_FULLSCREEN : '&#x26F6; '+TXT_FULLSCREEN;
+    resizeTopoRow();
+  }
+  document.getElementById('btn-fullscreen').onclick = ()=> setFullscreen(!isFullscreen);
+
+  function esc(s){ return s==null?'':String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  function isDarkTheme(){
+    return document.documentElement.getAttribute('data-bs-theme') === 'dark';
+  }
+  // Shared glow colour (tuned per theme for contrast against the canvas/panel)
+  // used as a shadow on top of a cable's own colour, so white/black cables
+  // stay visible against a same-toned background.
+  function cableHighlightColor(){ return isDarkTheme() ? '#a9b4c9' : '#475569'; }
+
+  // Front/rear ports on a patch panel share the same hop and can carry the same
+  // name, so callers must show this tag or the two entries look duplicated.
+  // `fg` lets callers rendering on an arbitrary role-coloured background (the
+  // compact trace blocks) pass their own contrast colour instead of the
+  // tblr theme vars, which are only tuned for the neutral panel background.
+  function portKindTag(model, fg){
+    const label = model==='frontport' ? TXT_FRONT : model==='rearport' ? TXT_REAR : '';
+    if(!label) return '';
+    const color = fg || 'var(--tblr-secondary)';
+    const borderColor = fg ? (fg==='#111' ? 'rgba(0,0,0,.4)' : 'rgba(255,255,255,.5)') : 'var(--tblr-border-color)';
+    return `<span style="font-size:9px;font-weight:700;letter-spacing:.03em;color:${color};border:1px solid ${borderColor};border-radius:3px;padding:0 4px;margin-right:5px;vertical-align:1px;">${label}</span>`;
+  }
+
+  // Pick black or white text for a given hex background so labels stay
+  // legible regardless of how light/dark the role colour itself is.
+  function contrastText(hex){
+    const h = (hex||'').replace('#','');
+    if(h.length!==6) return '#fff';
+    const r=parseInt(h.slice(0,2),16), g=parseInt(h.slice(2,4),16), b=parseInt(h.slice(4,6),16);
+    const lum = (0.299*r+0.587*g+0.114*b)/255;
+    return lum>0.6 ? '#111' : '#fff';
+  }
+
+  // Compact stand-in for NetBox's own cable-trace diagram: same block/cable
+  // visual language — device blocks coloured by device role, like the graph
+  // itself — but names only (no site/location/rack) and short cable
+  // connectors, so it fits the side panel's width and stays short.
+  function buildCompactTraceHtml(path, pk){
+    const blocks = [];
+    (path.elements||[]).forEach(el=>{
+      if(el.kind==='port'){
+        const last = blocks[blocks.length-1];
+        if(last && last.kind==='device' && last.device_pk===el.device_pk){
+          last.ports.push(el);
+        } else {
+          blocks.push({kind:'device', device_pk:el.device_pk, device:el.device, device_url:el.device_url, ports:[el]});
+        }
+      } else {
+        blocks.push({kind:'link', name:el.name, color:el.color, url:el.url});
+      }
+    });
+
+    let html = '<div style="display:flex;flex-direction:column;">';
+    blocks.forEach(b=>{
+      if(b.kind==='device'){
+        const nd = (nodesData||[]).find(d=>d.pk===b.device_pk);
+        const bg = (nd && nd.color) || '#94a3b8';
+        const fg = contrastText(bg);
+        const selected = b.device_pk===pk;
+        const ring = selected ? 'box-shadow:0 0 0 2px #f59f00;' : '';
+        html += `<div style="background:${esc(bg)};color:${fg};border:1px solid var(--tblr-border-color);border-radius:5px;padding:5px 8px;font-size:12px;${ring}">`;
+        html += b.device_url
+          ? `<a href="${esc(b.device_url)}" style="font-weight:700;color:inherit;text-decoration:none;">${esc(b.device||'')}</a>`
+          : `<strong>${esc(b.device||'')}</strong>`;
+        html += `<div style="font-size:11px;margin-top:2px;">`;
+        html += b.ports.map(p=>portKindTag(p.model, fg) + (p.url
+            ? `<a href="${esc(p.url)}" style="color:inherit;text-decoration:underline;">${esc(p.name||'')}</a>`
+            : esc(p.name||''))
+          ).join('<br>');
+        html += `</div></div>`;
+      } else {
+        const color = b.color || '#94a3b8';
+        const label = TXT_CABLE + ' ' + (b.name||'');
+        const labelHtml = b.url
+          ? `<a href="${esc(b.url)}" style="font-size:11px;color:var(--tblr-secondary);text-decoration:none;">${esc(label)}</a>`
+          : `<span style="font-size:11px;color:var(--tblr-secondary);">${esc(label)}</span>`;
+        // Vertical connector centered under the device blocks above/below
+        // (NetBox-trace style), with the cable label to its left.
+        html += `<div style="position:relative;height:26px;">`+
+                `<div style="position:absolute;left:50%;top:0;bottom:0;width:2px;transform:translateX(-50%);background:${esc(color)};box-shadow:0 0 2px 0 ${esc(cableHighlightColor())};"></div>`+
+                `<div style="position:absolute;right:calc(50% + 8px);top:50%;transform:translateY(-50%);white-space:nowrap;">${labelHtml}</div>`+
+                `</div>`;
+      }
+    });
+    html += '</div>';
+    return html;
+  }
+
+  fetch(DATA_URL, {headers:{'X-Requested-With':'XMLHttpRequest'}})
+    .then(r=>r.json()).then(build)
+    .catch(e=>{ document.getElementById('topo-wrap').innerHTML='<p style="color:red;padding:12px">'+esc(TXT_ERROR)+' '+esc(String(e))+'</p>'; });
+
+  function build(data){
+    allPaths = data.paths || [];
+
+    const svgEl = document.getElementById('topo-svg');
+    const W = svgEl.parentElement.clientWidth  || 700;
+    const H = svgEl.parentElement.clientHeight || 640;
+    svgEl.setAttribute('viewBox', `0 0 ${W} ${H}`);
+
+    const svg = d3.select(svgEl);
+
+    const gRoot = svg.append('g');
+
+    zoomBehavior = d3.zoom().scaleExtent([0.15,5]).on('zoom', e=>gRoot.attr('transform',e.transform));
+    // Mouse wheel = zoom, background drag = pan
+    svg.call(zoomBehavior);
+    // Visual hint
+    svg.append('text')
+      .attr('x', W-10).attr('y', H-10)
+      .attr('text-anchor','end').attr('font-size','10px')
+      .attr('fill','#94a3b8').attr('pointer-events','none')
+      .text(TXT_HINT);
+
+    // Click on SVG background (not on a node) → reset
+    svg.on('click', function(e){
+      if(e.target === svgEl) selectDevice(null);
+    });
+    // Escape → exit fullscreen first if active, otherwise reset selection
+    document.addEventListener('keydown', function(e){
+      if(e.key !== 'Escape') return;
+      if(isFullscreen) setFullscreen(false);
+      else selectDevice(null);
+    });
+    // Re-apply cable colours if the user flips the light/dark theme toggle
+    // without reloading, so the highlight stays theme-correct.
+    new MutationObserver(()=>selectDevice(selectedPk))
+      .observe(document.documentElement, {attributes:true, attributeFilter:['data-bs-theme']});
+
+    // Colour read directly from NetBox (d.color)
+    function roleColor(d){ return d.color || "#94a3b8"; }
+
+    // Prepare data
+    nodesData = (data.nodes||[]).map(n=>({...n, x:W/2+(Math.random()-0.5)*200, y:H/2+(Math.random()-0.5)*200}));
+    const nodeById = {};
+    nodesData.forEach(n=>nodeById[n.id]=n);
+
+    linksData = (data.edges||[]).map(e=>({
+      id:e.id,
+      source: nodeById[e.source],
+      target: nodeById[e.target],
+      color: e.color || '',
+    })).filter(l=>l.source&&l.target);
+
+    const neighborMap = new Map();
+    nodesData.forEach(n => neighborMap.set(n, []));
+    linksData.forEach(l => {
+      neighborMap.get(l.source).push(l.target);
+      neighborMap.get(l.target).push(l.source);
+    });
+
+    // Strict SVG render order: links first, nodes next, labels on top
+    // D3 best practice: no reordered intermediate groups, everything directly in gRoot
+    const DEFAULT_CABLE_COLOR = '#94a3b8';
+    function cableColor(d){ return d.color || DEFAULT_CABLE_COLOR; }
+    function cableMutedColor(){ return isDarkTheme() ? '#333a4d' : '#dde3ec'; }
+    const CABLE_BASE_WIDTH = 1.8, CABLE_BASE_OPACITY = 0.85;
+    const CABLE_GLOW = d => `drop-shadow(0 0 3px ${cableHighlightColor()})`;
+
+    // 1. Links (bottom layer)
+    gLinks = gRoot.append('g').attr('class','layer-links');
+    const linkEl = gLinks.selectAll('line').data(linksData).join('line')
+      .attr('stroke-linecap','round')
+      .style('pointer-events','none');
+
+    // Resets every cable to its own colour with the shared glow. Called on
+    // init and whenever a selection is cleared, so the two states can never
+    // drift apart.
+    function resetLinks(){
+      linkEl.attr('stroke', cableColor)
+        .attr('stroke-width', CABLE_BASE_WIDTH)
+        .attr('opacity', CABLE_BASE_OPACITY)
+        .style('filter', CABLE_GLOW);
+    }
+    resetLinks();
+
+    // 2. Nodes (above links)
+    gNodes = gRoot.append('g').attr('class','layer-nodes');
+
+    // 3. Labels (topmost layer)
+    gLabels = gRoot.append('g').attr('class','layer-labels').attr('style','pointer-events:none');
+
+    // Nodes — coloured by NetBox device role
+    const nodeEl = gNodes.selectAll('g').data(nodesData).join('g')
+      .attr('class','topo-node')
+      .style('cursor','pointer')
+      .call(d3.drag()
+        .on('start',(e,d)=>{ simulation.alphaDecay(NORMAL_DECAY); if(!e.active)simulation.alphaTarget(0.3).restart(); d.fx=d.x;d.fy=d.y; })
+        .on('drag', (e,d)=>{ d.fx=e.x; d.fy=e.y; })
+        .on('end',  (e,d)=>{ if(!e.active)simulation.alphaTarget(0); d.fx=null;d.fy=null; }))
+      .on('click', (_,d)=>selectDevice(d.pk));
+
+    // Rounded square for local devices, circle for external ones
+    nodeEl.each(function(d){
+      const g = d3.select(this);
+      if(d.external){
+        g.append('circle')
+          .attr('r', 13)
+          .attr('fill', roleColor(d))
+          .attr('stroke','#333')
+          .attr('stroke-width', 1.5)
+          .attr('opacity', 0.55);
+      } else {
+        g.append('rect')
+          .attr('x', -13).attr('y', -13)
+          .attr('width', 26).attr('height', 26)
+          .attr('rx', 5).attr('ry', 5)
+          .attr('fill', roleColor(d))
+          .attr('stroke','#333')
+          .attr('stroke-width', 1.5);
+      }
+    });
+
+    // Labels — created in gLabels, separately
+    // Wraps on hyphen/underscore/space boundaries without discarding them,
+    // so the label still reads exactly like the object's real name.
+    const wrap = s=>{
+      const tokens=s.split(/([-_\s])/).filter(t=>t!==''), maxLen=16;
+      let lines=[],cur='';
+      tokens.forEach(t=>{ const next=cur+t; if(next.length>maxLen&&cur){lines.push(cur);cur=t;}else{cur=next;} });
+      if(cur)lines.push(cur);
+      return lines.slice(0,3);
+    };
+
+    const labelEl = gLabels.selectAll('g').data(nodesData).join('g').attr('pointer-events','none');
+    labelEl.each(function(d){
+      const g = d3.select(this);
+      const lines = wrap(d.label);
+      d._lines = lines.length;
+      lines.forEach((line,i)=>{
+        g.append('text')
+          .attr('text-anchor','middle')
+          .attr('font-size','11px')
+          .attr('font-family','inherit')
+          .attr('fill','var(--tblr-body-color,#1d273b)')
+          .attr('dy', i*14)
+          .text(line);
+      });
+    });
+
+
+    // Simulation
+    // Adaptive repulsion based on node count
+    const nodeCount = nodesData.length;
+    const defaultRepulsion = nodeCount > 100 ? -2000 : nodeCount > 50 ? -1000 : nodeCount > 20 ? -500 : -350;
+    const defaultDistance  = nodeCount > 100 ? 250  : nodeCount > 50 ? 180  : nodeCount > 20 ? 140  : 110;
+    document.getElementById('slider-repulsion').value = Math.abs(defaultRepulsion);
+
+    let stabilized = false, tickCount = 0;
+    const FAST_DECAY = 0.07, NORMAL_DECAY = 0.0228;
+    simulation = d3.forceSimulation(nodesData)
+      .alphaDecay(FAST_DECAY)
+      .force('link', d3.forceLink(linksData).id(d=>d.id).distance(defaultDistance).strength(0.7))
+      .force('charge', d3.forceManyBody().strength(-Math.abs(defaultRepulsion)).distanceMax(600))
+      .force('center', d3.forceCenter(W/2, H/2).strength(0.08))
+      .force('collide', d3.forceCollide(50))
+      .force('x', d3.forceX(W/2).strength(0.02))
+      .force('y', d3.forceY(H/2).strength(0.02))
+      .on('tick', ()=>{
+        tickCount++;
+        if(tickCount === 10) fitView(false);
+        if(!stabilized && simulation.alpha() < 0.05){
+          stabilized = true;
+          simulation.alphaDecay(NORMAL_DECAY);
+          fitView(true);
+        }
+        const r = 13;
+        linkEl.each(function(d){
+          const dx=d.target.x-d.source.x, dy=d.target.y-d.source.y, dist=Math.sqrt(dx*dx+dy*dy)||1;
+          const ox=dx/dist*r, oy=dy/dist*r;
+          const el=d3.select(this);
+          el.attr('x1',d.source.x+ox).attr('y1',d.source.y+oy)
+            .attr('x2',d.target.x-ox).attr('y2',d.target.y-oy);
+        });
+
+        nodeEl.attr('transform',d=>`translate(${d.x},${d.y})`);
+
+        // Label offset: opposite to neighbour centroid
+        labelEl.attr('transform',d=>{
+          const neighbors = neighborMap.get(d);
+          let ox=0, oy=-(13+5+d._lines*14); // default: above
+          if(neighbors && neighbors.length>0){
+            let cx=0,cy=0;
+            neighbors.forEach(o=>{ cx+=o.x-d.x; cy+=o.y-d.y; });
+            const len=Math.sqrt(cx*cx+cy*cy)||1;
+            const ux=-cx/len, uy=-cy/len; // opposite direction
+            const r=18;
+            ox = ux*r;
+            // uy>0 = label downward → add label height
+            oy = uy*r + (uy>0 ? 0 : -(d._lines*14));
+          }
+          return `translate(${d.x+ox},${d.y+oy})`;
+        });
+      });
+
+    // Dynamic legend — built after nodesData is populated
+    {
+      const seen = new Map();
+      nodesData.forEach(d=>{
+        if(d.role && d.color && !seen.has(d.color)) seen.set(d.color, d.role);
+        else if(!d.role || !d.color) seen.set('#94a3b8', TXT_UNKNOWN);
+      });
+      const LEGEND = Array.from(seen, ([color, label]) => ({color, label}))
+        .sort((a,b)=>a.label.localeCompare(b.label));
+
+      // +2 rows for shape legend
+      const totalRows = LEGEND.length + 3;
+      const leg = svg.append('g').attr('transform',`translate(12,${H-10-totalRows*16})`);
+
+      // Colour legend (roles)
+      LEGEND.forEach((item,i)=>{
+        const g = leg.append('g').attr('transform',`translate(0,${i*16})`);
+        g.append('circle').attr('r',5).attr('fill',item.color).attr('stroke','#333').attr('stroke-width',0.5);
+        g.append('text').attr('x',12).attr('y',4)
+          .attr('font-size','10px').attr('fill','var(--tblr-body-color,#1d273b)').text(item.label);
+      });
+
+      // Separator — centred in the reserved gap row between the two sections
+      const sepY = LEGEND.length * 16;
+      leg.append('line').attr('x1',0).attr('y1',sepY).attr('x2',90).attr('y2',sepY)
+        .attr('stroke','#d1d5db').attr('stroke-width',1);
+
+      // Shape legend
+      const shapeY = (LEGEND.length + 1) * 16;
+      const gLocal = leg.append('g').attr('transform',`translate(0,${shapeY})`);
+      gLocal.append('rect').attr('x',-5).attr('y',-5).attr('width',10).attr('height',10)
+        .attr('rx',2).attr('fill','#6b7280').attr('stroke','#333').attr('stroke-width',0.5);
+      gLocal.append('text').attr('x',12).attr('y',4)
+        .attr('font-size','10px').attr('fill','var(--tblr-body-color,#1d273b)').text(IN_SCOPE_LABEL);
+
+      const gExt = leg.append('g').attr('transform',`translate(0,${shapeY+16})`);
+      gExt.append('circle').attr('r',5).attr('fill','#6b7280').attr('stroke','#333').attr('stroke-width',0.5);
+      gExt.append('text').attr('x',12).attr('y',4)
+        .attr('font-size','10px').attr('fill','var(--tblr-body-color,#1d273b)').text(TXT_EXTERNAL);
+    }
+
+    // Highlight
+    let selectedPk = null;
+    function selectDevice(pk){
+      selectedPk = pk;
+      if(pk===null){
+        nodeEl.each(function(d){
+        const g = d3.select(this);
+        g.select('circle').attr('fill', roleColor(d)).attr('r', 13).attr('opacity', d.external?0.55:1)
+          .attr('stroke','#333').attr('stroke-width',1.5);
+        g.select('rect').attr('fill', roleColor(d))
+          .attr('x',-13).attr('y',-13).attr('width',26).attr('height',26).attr('opacity',1)
+          .attr('stroke','#333').attr('stroke-width',1.5);
+      });
+        resetLinks();
+        labelEl.attr('opacity',1);
+        panel.innerHTML='<p style="color:var(--tblr-secondary);margin:0;">'+esc(TXT_CLICK_DEVICE)+'</p>';
+        return;
+      }
+      const matching = allPaths.filter(p=>(p.device_pks||[]).includes(pk));
+      const inv = new Set([pk]);
+      matching.forEach(p=>(p.device_pks||[]).forEach(x=>inv.add(x)));
+
+      nodeEl.each(function(d){
+        const g = d3.select(this);
+        const fill = inv.has(d.pk) ? roleColor(d) : '#d1d5db';
+        const opacity = inv.has(d.pk) ? 1 : 0.15;
+        const ring = d.pk===pk ? '#f59f00' : '#333';
+        const ringWidth = d.pk===pk ? 3 : 1.5;
+        g.select('circle').attr('fill', fill).attr('r', d.pk===pk ? 17 : 13).attr('opacity', opacity)
+          .attr('stroke', ring).attr('stroke-width', ringWidth);
+        g.select('rect')
+          .attr('fill', fill)
+          .attr('x', d.pk===pk?-17:-13).attr('y', d.pk===pk?-17:-13)
+          .attr('width', d.pk===pk?34:26).attr('height', d.pk===pk?34:26)
+          .attr('opacity', opacity)
+          .attr('stroke', ring).attr('stroke-width', ringWidth);
+      });
+      labelEl.attr('opacity',d=>inv.has(d.pk)?1:0.2);
+      linkEl
+        .attr('stroke', d=>(inv.has(d.source.pk)&&inv.has(d.target.pk)) ? cableColor(d) : cableMutedColor())
+        .attr('stroke-width', d=>(inv.has(d.source.pk)&&inv.has(d.target.pk)) ? 3 : 1)
+        .attr('opacity', d=>(inv.has(d.source.pk)&&inv.has(d.target.pk)) ? 1 : 0.4)
+        .style('filter', d=>(inv.has(d.source.pk)&&inv.has(d.target.pk)) ? CABLE_GLOW(d) : null);
+
+      const nd = nodesData.find(d=>d.pk===pk);
+      const titleLink = nd && nd.url
+        ? `<a href="${esc(nd.url)}" style="font-weight:600;font-size:14px;margin-bottom:8px;display:block;color:var(--tblr-primary);text-decoration:none;">${esc(nd.label)}</a>`
+        : `<div style="font-weight:600;font-size:14px;margin-bottom:8px;">${esc(nd?nd.label:'')}</div>`;
+      let html = titleLink;
+      if(!matching.length){
+        html+=`<p style="color:var(--tblr-secondary);font-size:12px;">${esc(TXT_NO_CABLED_PATH)}</p>`;
+      } else {
+        const pathWord = matching.length===1 ? TXT_PATH_SINGULAR : TXT_PATH_PLURAL;
+        html+=`<div style="color:var(--tblr-secondary);font-size:11px;margin-bottom:8px;">${matching.length} ${esc(pathWord)}</div>`;
+        matching.forEach((path,i)=>{
+          html+=`<div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--tblr-border-color);">`;
+          html+=`<div style="font-size:11px;font-weight:600;color:var(--tblr-secondary);margin-bottom:6px;">${esc(TXT_PATH_LABEL)} ${i+1}</div>`;
+          html+=buildCompactTraceHtml(path, pk);
+          const ports = (path.elements||[]).filter(el=>el.kind==='port' && el.url);
+          if(ports.length){
+            const traceHref = ports[0].url+'trace/';
+            html+=`<a href="${esc(traceHref)}" target="_blank" rel="noopener" style="display:inline-block;margin-top:6px;font-size:11px;color:var(--tblr-primary);text-decoration:none;">${esc(TXT_OPEN_FULL_TRACE)} ↗</a>`;
+          }
+          html+=`</div>`;
+        });
+      }
+      panel.innerHTML=html;
+    }
+
+    function fitView(animate){
+      if(!nodesData || nodesData.length===0) return;
+      let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+      nodesData.forEach(d=>{ x0=Math.min(x0,d.x);y0=Math.min(y0,d.y);x1=Math.max(x1,d.x);y1=Math.max(y1,d.y); });
+      const pad=60, gw=x1-x0+pad*2, gh=y1-y0+pad*2;
+      const scale=Math.min(0.95, Math.min(W/gw, H/gh));
+      const tx=W/2 - scale*(x0+x1)/2;
+      const ty=H/2 - scale*(y0+y1)/2;
+      const t = d3.zoomIdentity.translate(tx,ty).scale(scale);
+      if(animate) svg.transition().duration(500).call(zoomBehavior.transform, t);
+      else svg.call(zoomBehavior.transform, t);
+    }
+
+    window._topoSelect = selectDevice;
+    document.getElementById('btn-fit').onclick = ()=>fitView(true);
+    document.getElementById('btn-zin').onclick=()=>svg.transition().duration(200).call(zoomBehavior.scaleBy, 1.3);
+    document.getElementById('btn-zout').onclick=()=>svg.transition().duration(200).call(zoomBehavior.scaleBy, 0.77);
+
+    document.getElementById('slider-repulsion').addEventListener('input', function(){
+      const val = -Math.abs(parseInt(this.value));
+      simulation.force('charge', d3.forceManyBody().strength(val).distanceMax(1200));
+      simulation.alpha(0.4).restart();
+    });
+
+    // --- Trace table ---
+    function buildTable(){
+      // Compute the max number of intermediate steps
+      // Each row = 1 path. Columns: Source device | Source port | Step N... | Dest device | Dest port
+      const rows = [];
+      allPaths.forEach(path=>{
+        const ports = (path.elements||[]).filter(e=>e.kind==='port');
+        if(ports.length < 2) return;
+        const origin = ports[0];
+        const dest   = ports[ports.length-1];
+        const middle = ports.slice(1, -1); // intermediate steps
+        rows.push({ origin, middle, dest, elements: path.elements });
+      });
+
+      // Max number of intermediate steps (grouped by device)
+      let maxNext = 0;
+      rows.forEach(r=>{
+        // Group intermediate ports by consecutive device. A patch-panel hop
+        // contributes both a rear port and a front port for the same device;
+        // keep both (rather than only the first) so nothing is silently dropped.
+        const devSeq = [];
+        r.middle.forEach(p=>{
+          if(devSeq.length && devSeq[devSeq.length-1].device===p.device){
+            devSeq[devSeq.length-1].ports.push(p);
+          } else {
+            devSeq.push({ device: p.device, device_url: p.device_url, ports: [p] });
+          }
+        });
+        r._devSeq = devSeq;
+        maxNext = Math.max(maxNext, devSeq.length);
+      });
+
+      // Thead with sorting. No colours/background here: the <table> carries
+      // NetBox's own `table` classes, so header contrast is governed by
+      // NetBox's theme CSS rather than plugin-authored inline styles.
+      const thStyle = 'white-space:nowrap; cursor:pointer; user-select:none;';
+      const colNames = [TXT_SOURCE_DEVICE,TXT_SOURCE_PORT,...Array.from({length:maxNext},(_,i)=>`${TXT_STEP} ${i+1}`),TXT_DEST_DEVICE,TXT_DEST_PORT];
+      let thead = '<tr>';
+      colNames.forEach((name,i)=>{
+        thead += `<th style="${thStyle}" onclick="window._topoSort(${i})">`;
+        thead += `${name} <span id="si-${i}" class="text-muted" style="font-size:10px;">⇅</span></th>`;
+      });
+      thead += '</tr>';
+      document.getElementById('trace-thead').innerHTML = thead;
+
+      // Tbody
+      const cellStyle = 'vertical-align:top;';
+      const dimStyle  = 'vertical-align:top;';
+
+      function textOfCell(r, col){
+        if(col===0) return r.origin.device||'';
+        if(col===1) return r.origin.name||'';
+        if(col===colNames.length-1) return r.dest.name||'';
+        if(col===colNames.length-2) return r.dest.device||'';
+        const step = r._devSeq[col-2];
+        return step ? (step.device||(step.ports&&step.ports[0]&&step.ports[0].name)||'') : '';
+      }
+
+      function deviceLink(port, style){
+        return port.device_url
+          ? `<a href="${esc(port.device_url)}" style="${style}">${esc(port.device||'')}</a>`
+          : esc(port.device||'');
+      }
+      function portLink(port, style){
+        return port.url
+          ? `<a href="${esc(port.url)}" style="${style}">${esc(port.name||'')}</a>`
+          : esc(port.name||'');
+      }
+
+      function renderTbody(){
+        let tbody = '';
+        rows.forEach(r=>{
+          const nSteps = r._devSeq.length;
+          const missing = maxNext - nSteps;
+          tbody += '<tr>';
+          tbody += `<td style="${cellStyle}">${deviceLink(r.origin,'color:var(--tblr-primary);')}</td>`;
+          tbody += `<td style="${cellStyle}">${portLink(r.origin,'color:var(--tblr-body-color);')}</td>`;
+          r._devSeq.forEach(step=>{
+            const dev = step.device ? `<strong>${deviceLink(step,'color:var(--tblr-body-color);font-weight:700;')}</strong><br>` : '';
+            const por = step.ports.map(p=>portKindTag(p.model)+portLink(p,'color:var(--tblr-secondary);')).join('<br>');
+            tbody += `<td style="${cellStyle}">${dev}${por}</td>`;
+          });
+          for(let i=0; i<missing; i++){
+            tbody += `<td class="text-muted text-center" style="${cellStyle}">—</td>`;
+          }
+          tbody += `<td class="text-muted" style="${dimStyle}">${deviceLink(r.dest,'color:var(--tblr-secondary);')}</td>`;
+          tbody += `<td class="text-muted" style="${dimStyle}">${portLink(r.dest,'color:var(--tblr-body-color);')}</td>`;
+          tbody += '</tr>';
+        });
+        document.getElementById('trace-tbody').innerHTML = tbody;
+      }
+
+      let _sortCol=-1, _sortAsc=true;
+      window._topoSort = function(col){
+        _sortAsc = _sortCol===col ? !_sortAsc : true;
+        _sortCol = col;
+        colNames.forEach((_,i)=>{ const ic=document.getElementById('si-'+i); if(ic) ic.textContent='⇅'; });
+        const ic = document.getElementById('si-'+col);
+        if(ic) ic.textContent = _sortAsc ? '▲' : '▼';
+        // Secondary sort: source device → source port asc; dest device → dest port asc
+        const isOriginDevice = (col===0);
+        const isDestDevice = (col===colNames.length-2);
+        rows.sort((a,b)=>{
+          const va=textOfCell(a,col).toLowerCase(), vb=textOfCell(b,col).toLowerCase();
+          let cmp = _sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+          if(cmp===0 && isOriginDevice){
+            cmp = (a.origin.name||'').toLowerCase().localeCompare((b.origin.name||'').toLowerCase());
+          } else if(cmp===0 && isDestDevice){
+            cmp = (a.dest.name||'').toLowerCase().localeCompare((b.dest.name||'').toLowerCase());
+          }
+          return cmp;
+        });
+        renderTbody();
+      };
+
+      renderTbody();
+    }
+
+    function exportCsv(){
+      const table = document.getElementById('trace-table');
+      const rows = Array.from(table.querySelectorAll('tr'));
+      const csv = rows.map(r=>
+        Array.from(r.querySelectorAll('th,td')).map(c=>'"'+c.innerText.replace(/"/g,'""')+'"').join(',')
+      ).join('\n');
+      const a = document.createElement('a');
+      a.href = 'data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
+      a.download = 'cable_traces.csv';
+      a.click();
+    }
+
+    const modal = document.getElementById('trace-modal');
+    document.getElementById('btn-table').onclick=()=>{
+      buildTable();
+      modal.style.display='block';
+    };
+    document.getElementById('btn-close-modal').onclick=()=>{ modal.style.display='none'; };
+    modal.addEventListener('click',e=>{ if(e.target===modal) modal.style.display='none'; });
+    document.getElementById('btn-export-csv').onclick=exportCsv;
+  }
+})();
+</script>
+{% endif %}

@@ -1,16 +1,26 @@
 """
-NetBox topology — read via CablePath.path_objects
+NetBox topology — targeted CablePath scan with batch object resolution.
 
-Approach: we iterate ONLY ONCE over all NetBox CablePaths (a table that is
-generally small in practice — a few hundred rows — as a preliminary SQL
-filter on the JSON 'path' field proved slower than a full scan due to the
-lack of a usable GIN index on this version of NetBox).
-
-For a single location, we filter paths that involve its devices.
-For multiple locations (Tenant view), we perform the scan once and distribute
-paths to each relevant location instead of re-scanning for each location
-(gain proportional to the number of locations).
+For a given set of device PKs we:
+1. Find all cable-termination node-strings belonging to those devices.
+2. Filter CablePaths at the DB level via _nodes__overlap (GIN-indexed).
+3. Parse the raw JSON ``path`` field and batch-fetch referenced objects
+   (one query per ContentType instead of one per node).
 """
+
+from collections import defaultdict
+
+CABLE_SCAN_CACHE_TTL = 30
+
+_TERMINATION_MODEL_NAMES = (
+    "interface",
+    "consoleport",
+    "consoleserverport",
+    "powerport",
+    "poweroutlet",
+    "frontport",
+    "rearport",
+)
 
 
 def _device_of(obj):
@@ -31,12 +41,16 @@ def _obj_info(obj):
             device_url = device.get_absolute_url()
         except Exception:
             pass
+    role_obj = getattr(device, "role", None) if device else None
+    role_color = getattr(role_obj, "color", "") or "" if role_obj else ""
     info = {
         "name": getattr(obj, "name", None) or str(obj),
         "model": model,
         "device": device.name if device else None,
         "device_pk": device.pk if device else None,
         "device_url": device_url,
+        "device_role": role_obj.name if role_obj else "",
+        "device_role_color": "#" + role_color if role_color else "",
         "color": "#" + raw_color if raw_color else "",
         "url": None,
     }
@@ -67,37 +81,129 @@ def _flatten_path_objects(cp):
     return flat
 
 
-def _scan_all_cable_paths():
+def _device_termination_nodes(device_pks):
     """
-    Single scan of all NetBox CablePaths. Returns a list of tuples
-    (elements, device_pks_in_path) for reuse across multiple locations
-    without repeating the scan.
+    Return a list of node-strings (``"<ct_id>:<pk>"``) for all cable
+    terminations belonging to the given device PKs.
     """
+    from django.contrib.contenttypes.models import ContentType
+
+    nodes = []
+    for model_name in _TERMINATION_MODEL_NAMES:
+        try:
+            ct = ContentType.objects.get(app_label="dcim", model=model_name)
+        except ContentType.DoesNotExist:
+            continue
+        term_pks = (
+            ct.model_class()
+            .objects.filter(device__pk__in=device_pks)
+            .values_list("pk", flat=True)
+        )
+        for pk in term_pks:
+            nodes.append(f"{ct.pk}:{pk}")
+    return nodes
+
+
+def _batch_resolve_objects(path_rows):
+    """
+    Given raw ``path`` JSON from multiple CablePaths, bulk-fetch every
+    referenced object with one query per ContentType.
+
+    Returns ``{node_string: model_instance}``.
+    """
+    from django.contrib.contenttypes.models import ContentType
+
+    by_ct = defaultdict(set)
+    for raw_path in path_rows:
+        for step in raw_path:
+            for node_str in step:
+                ct_id, obj_pk = node_str.split(":")
+                by_ct[int(ct_id)].add(int(obj_pk))
+
+    resolved = {}
+    for ct_id, pks in by_ct.items():
+        ct = ContentType.objects.get_for_id(ct_id)
+        model_cls = ct.model_class()
+        if model_cls is None:
+            continue
+        qs = model_cls.objects.filter(pk__in=pks)
+        if hasattr(model_cls, "device"):
+            qs = qs.select_related("device", "device__role")
+        for obj in qs:
+            resolved[f"{ct_id}:{obj.pk}"] = obj
+    return resolved
+
+
+def _scan_cable_paths(device_pks):
+    """
+    Scan CablePaths relevant to the given device PKs.
+
+    1. Build termination node-strings for devices.
+    2. Filter CablePaths via _nodes__overlap (GIN-indexed).
+    3. Batch-resolve all referenced objects.
+    4. Return a list of (elements, device_pks_in_path) tuples.
+
+    Results are cached per device-set for CABLE_SCAN_CACHE_TTL seconds.
+    """
+    from django.core.cache import cache as django_cache
+
+    cache_key = "netbox_topo:scan:" + _make_cache_key(device_pks)
+    cached = django_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    term_nodes = _device_termination_nodes(device_pks)
+    if not term_nodes:
+        django_cache.set(cache_key, [], CABLE_SCAN_CACHE_TTL)
+        return []
+
     from dcim.models import CablePath
 
+    cable_paths = list(
+        CablePath.objects.filter(_nodes__overlap=term_nodes).only("path")
+    )
+
+    if not cable_paths:
+        django_cache.set(cache_key, [], CABLE_SCAN_CACHE_TTL)
+        return []
+
+    raw_paths = [cp.path for cp in cable_paths]
+    obj_map = _batch_resolve_objects(raw_paths)
+
     results = []
-    for cp in CablePath.objects.all():
-        flat = _flatten_path_objects(cp)
-        if not flat:
-            continue
-
+    for raw_path in raw_paths:
         elements = []
-        device_pks_in_path = []
-        for obj in flat:
-            if _is_cable(obj):
-                elements.append({"kind": "link", **_obj_info(obj)})
-            else:
-                elements.append({"kind": "port", **_obj_info(obj)})
-                d = _device_of(obj)
-                if d:
-                    device_pks_in_path.append(d.pk)
+        path_device_pks = []
+        for step in raw_path:
+            for node_str in step:
+                obj = obj_map.get(node_str)
+                if obj is None:
+                    continue
+                if _is_cable(obj):
+                    elements.append({"kind": "link", **_obj_info(obj)})
+                else:
+                    elements.append({"kind": "port", **_obj_info(obj)})
+                    d = _device_of(obj)
+                    if d:
+                        path_device_pks.append(d.pk)
 
-        if not device_pks_in_path:
-            continue
+        if path_device_pks:
+            results.append((elements, path_device_pks))
 
-        results.append((elements, device_pks_in_path))
-
+    django_cache.set(cache_key, results, CABLE_SCAN_CACHE_TTL)
     return results
+
+
+def _make_cache_key(device_pks):
+    """Stable short cache key from a set of device PKs."""
+    raw = ",".join(str(pk) for pk in sorted(device_pks))
+    return _short_hash(raw)
+
+
+def _short_hash(s):
+    import hashlib
+
+    return hashlib.md5(s.encode()).hexdigest()[:12]
 
 
 def _build_topology_from_scan(scan_results, location_pks):
@@ -169,6 +275,8 @@ def _build_topology_from_scan(scan_results, location_pks):
                 el.get("device"),
                 el.get("device_url"),
                 external=(dpk not in location_pks),
+                role=el.get("device_role", ""),
+                color=el.get("device_role_color", ""),
             )
             if not device_seq or device_seq[-1] != dpk:
                 device_seq.append(dpk)
@@ -215,7 +323,7 @@ def build_location_topology(location):
     devices_qs = list(Device.objects.filter(location=location).select_related("role"))
     location_pks = {d.pk for d in devices_qs}
 
-    scan_results = _scan_all_cable_paths()
+    scan_results = _scan_cable_paths(location_pks)
     data = _build_topology_from_scan(scan_results, location_pks)
 
     # Ensure all location devices are nodes even when uncabled,
@@ -254,7 +362,6 @@ def build_multi_location_topology(locations):
     from dcim.models import Device
 
     locations = list(locations)
-    scan_results = _scan_all_cable_paths()
 
     # device pk -> location name (to annotate each node/path afterwards)
     device_to_location = {}
@@ -269,6 +376,7 @@ def build_multi_location_topology(locations):
         for pk in pks:
             device_to_location[pk] = location.name
 
+    scan_results = _scan_cable_paths(all_location_pks)
     data = _build_topology_from_scan(scan_results, all_location_pks)
 
     # Annotate each node with its originating location (if known).

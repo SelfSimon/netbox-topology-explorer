@@ -1,0 +1,111 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: netbox-topology-explorer\n"
+"Report-Msgid-Bugs-To: \n"
+"Language: fr\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+msgid "Topology"
+msgstr "Topologie"
+
+msgid "Topology Explorer"
+msgstr "Explorateur de topologie"
+
+msgid "Graphically displays devices in a location and the full cable path trace"
+msgstr "Affiche graphiquement les appareils d'un emplacement et la trace complète des chemins de câbles"
+
+msgid "No devices in this location."
+msgstr "Aucun appareil dans cet emplacement."
+
+msgid "In this location"
+msgstr "Dans cet emplacement"
+
+msgid "No devices found for this tenant."
+msgstr "Aucun appareil trouvé pour ce locataire."
+
+msgid "In this tenant"
+msgstr "Dans ce locataire"
+
+msgid "No devices found for this tenant group."
+msgstr "Aucun appareil trouvé pour ce groupe de locataires."
+
+msgid "In this tenant group"
+msgstr "Dans ce groupe de locataires"
+
+msgid "Center"
+msgstr "Centrer"
+
+msgid "Spacing"
+msgstr "Espacement"
+
+msgid "Trace table"
+msgstr "Tableau des traces"
+
+msgid "Fullscreen"
+msgstr "Plein écran"
+
+msgid "Exit fullscreen"
+msgstr "Quitter le plein écran"
+
+msgid "Cable traces — all devices"
+msgstr "Traces de câbles — tous les appareils"
+
+msgid "CSV"
+msgstr "CSV"
+
+msgid "Click on a device."
+msgstr "Cliquez sur un appareil."
+
+msgid "Front"
+msgstr "Avant"
+
+msgid "Rear"
+msgstr "Arrière"
+
+msgid "Cable"
+msgstr "Câble"
+
+msgid "Error:"
+msgstr "Erreur :"
+
+msgid "Scroll to zoom · Drag background to pan · Escape to deselect"
+msgstr "Molette pour zoomer · Glisser l'arrière-plan pour déplacer · Échap pour désélectionner"
+
+msgid "Unknown"
+msgstr "Inconnu"
+
+msgid "External"
+msgstr "Externe"
+
+msgid "No cabled path."
+msgstr "Aucun chemin câblé."
+
+msgid "path"
+msgstr "chemin"
+
+msgid "paths"
+msgstr "chemins"
+
+msgid "Path"
+msgstr "Chemin"
+
+msgid "Open full trace"
+msgstr "Ouvrir la trace complète"
+
+msgid "Source device"
+msgstr "Appareil source"
+
+msgid "Source port"
+msgstr "Port source"
+
+msgid "Step"
+msgstr "Étape"
+
+msgid "Destination device"
+msgstr "Appareil de destination"
+
+msgid "Destination port"
+msgstr "Port de destination"

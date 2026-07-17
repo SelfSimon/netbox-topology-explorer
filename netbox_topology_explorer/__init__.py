@@ -7,13 +7,23 @@ except Exception:
         pass
 
 
+try:
+    from django.utils.translation import gettext_lazy as _
+except Exception:
+    # Same rationale as the PluginConfig fallback above: Django is not a
+    # declared dependency of this package (it's provided by NetBox at
+    # runtime), so pytest collection must not require it.
+    def _(s):
+        return s
+
+
 class TopologyConfig(PluginConfig):
     name = "netbox_topology_explorer"
-    verbose_name = "Topology Explorer"
-    description = (
+    verbose_name = _("Topology Explorer")
+    description = _(
         "Graphically displays devices in a location and the full cable path trace"
     )
-    version = "0.1.0"
+    version = "0.2.0"
     author = "G1tHub-PRO"
     base_url = "topology"
 
