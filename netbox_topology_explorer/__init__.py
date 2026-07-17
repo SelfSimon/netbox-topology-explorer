@@ -23,7 +23,7 @@ class TopologyConfig(PluginConfig):
     description = _(
         "Graphically displays devices in a location and the full cable path trace"
     )
-    version = "0.1.0"
+    version = "0.2.0"
     author = "G1tHub-PRO"
     base_url = "topology"
 
