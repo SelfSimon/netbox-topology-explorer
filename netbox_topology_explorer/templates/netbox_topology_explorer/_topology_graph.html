@@ -56,19 +56,21 @@
                  either) so it overlays the full row -- graph AND trace panel --
                  rather than just the graph canvas. -->
             <div id="trace-modal" style="display:none; position:absolute; inset:0; z-index:100; background:rgba(0,0,0,0.45); overflow:auto; padding:20px;">
-              <div style="background:var(--tblr-card-bg,#fff); border-radius:8px; padding:20px; max-width:1100px; margin:0 auto; position:relative;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
-                  <strong style="font-size:15px;">{{ TXT_CABLE_TRACES_TITLE }}</strong>
-                  <div style="display:flex; gap:8px; align-items:center;">
-                    <button id="btn-export-csv" style="background:var(--tblr-card-bg,#fff); border:1px solid var(--tblr-border-color); border-radius:6px; padding:3px 10px; font-size:12px; cursor:pointer; color:var(--tblr-body-color);">⬇ {{ TXT_CSV }}</button>
-                    <button id="btn-close-modal" style="background:none; border:none; font-size:20px; cursor:pointer; color:var(--tblr-body-color); line-height:1;">×</button>
+              <div class="card" style="max-width:1100px; margin:0 auto;">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                  <strong>{{ TXT_CABLE_TRACES_TITLE }}</strong>
+                  <div class="d-flex gap-2 align-items-center">
+                    <button id="btn-export-csv" class="btn btn-outline-secondary btn-sm">⬇ {{ TXT_CSV }}</button>
+                    <button id="btn-close-modal" type="button" class="btn-close" aria-label="Close"></button>
                   </div>
                 </div>
-                <div style="overflow-x:auto;">
-                  <table id="trace-table" class="table table-hover table-sm" style="font-size:12px;">
-                    <thead id="trace-thead"></thead>
-                    <tbody id="trace-tbody"></tbody>
-                  </table>
+                <div class="card-body p-0">
+                  <div class="table-responsive">
+                    <table id="trace-table" class="table table-hover table-sm object-list" style="font-size:12px;">
+                      <thead id="trace-thead"></thead>
+                      <tbody id="trace-tbody"></tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </div>
